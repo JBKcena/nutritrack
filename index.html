@@ -160,10 +160,10 @@
             const getDayIndex = (dateStr) => new Date(dateStr).getDay();
 
             // --- State ---
-            const [logs, setLogs] = useState(() => JSON.parse(localStorage.getItem('nt_v30_logs')) || []);
-            const [foodDatabase, setFoodDatabase] = useState(() => JSON.parse(localStorage.getItem('nt_v30_db')) || []);
+            const [logs, setLogs] = useState(() => JSON.parse(localStorage.getItem('nt_v32_logs')) || []);
+            const [foodDatabase, setFoodDatabase] = useState(() => JSON.parse(localStorage.getItem('nt_v32_db')) || []);
             const [goals, setGoals] = useState(() => {
-                const s = localStorage.getItem('nt_v30_goals');
+                const s = localStorage.getItem('nt_v32_goals');
                 if (s) return JSON.parse(s);
                 const d = { calories: 2192, protein: 150, carbs: 250, fat: 60, fiber: 30 };
                 const init = {}; [0,1,2,3,4,5,6].forEach(i => init[i] = {...d});
@@ -180,6 +180,8 @@
             const [modalTab, setModalTab] = useState('quick');
             const [showDbAddModal, setShowDbAddModal] = useState(false);
             const [showClearDbConfirm, setShowClearDbConfirm] = useState(false);
+            const [itemToDelete, setItemToDelete] = useState(null);
+            
             const [notification, setNotification] = useState(null);
             const [isImporting, setIsImporting] = useState(false);
             const [isScanning, setIsScanning] = useState(false);
@@ -206,9 +208,9 @@
                 if (l) { l.style.opacity = '0'; setTimeout(() => l.remove(), 500); }
             }, []);
 
-            useEffect(() => localStorage.setItem('nt_v30_logs', JSON.stringify(logs)), [logs]);
-            useEffect(() => localStorage.setItem('nt_v30_db', JSON.stringify(foodDatabase)), [foodDatabase]);
-            useEffect(() => localStorage.setItem('nt_v30_goals', JSON.stringify(goals)), [goals]);
+            useEffect(() => localStorage.setItem('nt_v32_logs', JSON.stringify(logs)), [logs]);
+            useEffect(() => localStorage.setItem('nt_v32_db', JSON.stringify(foodDatabase)), [foodDatabase]);
+            useEffect(() => localStorage.setItem('nt_v32_goals', JSON.stringify(goals)), [goals]);
 
             const currentDayGoals = goals[getDayIndex(selectedDate)] || { calories: 2000, protein: 150, carbs: 250, fat: 60, fiber: 30 };
             const dailyLogsTotal = logs.filter(log => log.date === selectedDate);
@@ -221,7 +223,6 @@
             }), { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 });
 
             const consumedPercentage = (totals.calories / currentDayGoals.calories) * 100;
-
             const filteredSearch = searchQuery.length >= 2 ? foodDatabase.filter(i => i.name.toLowerCase().includes(searchQuery.toLowerCase())).slice(0, 30) : [];
             const filteredDatabaseView = foodDatabase.filter(i => i.name.toLowerCase().includes(dbSearchQuery.toLowerCase()));
             const loggedDays = new Set(logs.map(l => l.date));
@@ -230,10 +231,7 @@
                 const map = new Map();
                 [...logs].reverse().forEach(l => {
                     if (!map.has(l.name)) {
-                        map.set(l.name, { 
-                            name: l.name, calories: l.calories, protein: l.protein, 
-                            fat: l.fat, carbs: l.carbs, fiber: l.fiber 
-                        });
+                        map.set(l.name, { name: l.name, calories: l.calories, protein: l.protein, fat: l.fat, carbs: l.carbs, fiber: l.fiber });
                     }
                 });
                 return Array.from(map.values()).slice(0, 15);
@@ -258,10 +256,10 @@
                 yesterday.setDate(yesterday.getDate() - 1);
                 const yDateStr = yesterday.toISOString().split('T')[0];
                 const items = logs.filter(l => l.date === yDateStr && l.category === cat);
-                if (items.length === 0) { showToast("Nichts von gestern gefunden."); return; }
+                if (items.length === 0) { showToast("Vortag leer."); return; }
                 const newItems = items.map(i => ({ ...i, id: Date.now() + Math.random(), date: selectedDate }));
                 setLogs([...newItems, ...logs]);
-                showToast(`${items.length} Einträge kopiert!`);
+                showToast("Kopiert!");
             };
 
             const handleQuickTrackSubmit = (e) => {
@@ -269,31 +267,23 @@
                 if (!quickTrack.name || !quickTrack.kcal) return;
                 const g = parseFloat(amount) || 100;
                 const factor = calcMode === 'total' ? (100 / g) : 1;
-                const foodData = {
-                    name: quickTrack.name,
-                    calories: parseFloat(quickTrack.kcal) * factor,
-                    protein: parseFloat(quickTrack.protein || 0) * factor,
-                    fat: parseFloat(quickTrack.fat || 0) * factor,
-                    carbs: parseFloat(quickTrack.carbs || 0) * factor,
-                    fiber: parseFloat(quickTrack.fiber || 0) * factor
-                };
-                addLogEntry(foodData, g);
+                addLogEntry({ name: quickTrack.name, calories: parseFloat(quickTrack.kcal) * factor, protein: parseFloat(quickTrack.protein || 0) * factor, fat: parseFloat(quickTrack.fat || 0) * factor, carbs: parseFloat(quickTrack.carbs || 0) * factor, fiber: parseFloat(quickTrack.fiber || 0) * factor }, g);
             };
 
             const handleAiAnalyzeRecipe = async () => {
-                if (!aiPrompt) return showToast("Zutaten eingeben.");
+                if (!aiPrompt) return showToast("Bitte beschreiben.");
                 setIsAiLoading(true);
                 try {
                     const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`, {
                         method: 'POST', headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ contents: [{ parts: [{ text: `Analysiere Rezept oder Mahlzeit: "${aiPrompt}". Schätze Nährwerte pro 100g oder gesamt. JSON Format: { "name": string, "kcal": number, "protein": number, "fat": number, "carbs": number, "fiber": number, "isPer100g": boolean }. Nutze deutsche Begriffe.` }] }], generationConfig: { responseMimeType: "application/json" } })
+                        body: JSON.stringify({ contents: [{ parts: [{ text: `Analysiere Rezept: "${aiPrompt}". Schätze Nährwerte pro 100g oder gesamt. JSON: { "name": string, "kcal": number, "protein": number, "fat": number, "carbs": number, "fiber": number, "isPer100g": boolean }.` }] }], generationConfig: { responseMimeType: "application/json" } })
                     });
                     const data = await res.json();
                     const p = JSON.parse(data.candidates?.[0]?.content?.parts?.[0]?.text);
                     setQuickTrack({ name: p.name, kcal: p.kcal.toString(), protein: p.protein.toString(), fat: p.fat.toString(), carbs: p.carbs.toString(), fiber: p.fiber.toString() });
                     setCalcMode(p.isPer100g ? 'per100g' : 'total');
-                    showToast("KI fertig! ✨");
-                } catch (e) { showToast("KI Fehler"); } finally { setIsAiLoading(false); }
+                    showToast("Analysiert!");
+                } catch (e) { showToast("Fehler."); } finally { setIsAiLoading(false); }
             };
 
             const handleCameraScan = async (e) => {
@@ -317,10 +307,25 @@
                         const data = await res.json();
                         const p = JSON.parse(data.candidates?.[0]?.content?.parts?.[0]?.text);
                         setQuickTrack({ name: p.name || 'Gescannter Eintrag', kcal: p.calories.toString(), protein: p.protein.toString(), fat: p.fat.toString(), carbs: p.carbs.toString(), fiber: (p.fiber || 0).toString() });
-                        showToast("Scan erfolgreich! ✨");
+                        showToast("Scan OK!");
                     } catch (err) { showToast("Scan fehlgeschlagen."); } finally { setIsScanning(false); }
                 };
                 reader.readAsDataURL(file);
+            };
+
+            const handleDbAddSubmit = (e) => {
+                e.preventDefault();
+                const newItem = { id: `manual-${Date.now()}`, name: quickTrack.name || 'Unbenannt', calories: parseFloat(quickTrack.kcal) || 0, protein: parseFloat(quickTrack.protein) || 0, fat: parseFloat(quickTrack.fat) || 0, carbs: parseFloat(quickTrack.carbs) || 0, fiber: parseFloat(quickTrack.fiber) || 0 };
+                setFoodDatabase([newItem, ...foodDatabase]); resetAddState(); showToast("Gespeichert!");
+            };
+
+            const handleSaveLogEdit = () => {
+                if (editingLog) {
+                    setLogs(logs.map(l => l.id === editingLog.id ? { ...l, amount } : l));
+                    setEditingLog(null); setAmount(100); showToast("Aktualisiert!");
+                } else if (selectedFood) {
+                    addLogEntry(selectedFood, amount);
+                }
             };
 
             const exportData = () => {
@@ -328,7 +333,7 @@
                 const blob = new Blob([data], { type: 'text/plain' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a'); a.href = url; a.download = `nutritrack_backup_${getTodayStr()}.txt`; a.click();
-                showToast("Backup heruntergeladen!");
+                showToast("Backup exportiert!");
             };
 
             const importData = (e) => {
@@ -341,8 +346,8 @@
                         if (imported.logs) setLogs(imported.logs);
                         if (imported.foodDatabase) setFoodDatabase(imported.foodDatabase);
                         if (imported.goals) setGoals(imported.goals);
-                        showToast("Backup erfolgreich geladen!");
-                    } catch (err) { showToast("Fehler beim Laden."); }
+                        showToast("Backup geladen!");
+                    } catch (err) { showToast("Ladefehler."); }
                 };
                 reader.readAsText(file);
             };
@@ -363,32 +368,13 @@
                             const cv = (v) => v ? parseFloat(v.replace(/"/g, '').replace(',', '.')) || 0 : 0;
                             return { id: `bls-${i}-${Date.now()}`, name: c[idx.n].replace(/"/g, ''), calories: cv(c[idx.k]), protein: cv(c[idx.p]), fat: cv(c[idx.f]), carbs: cv(c[idx.c]), fiber: cv(c[idx.b]) };
                         }).filter(x => x);
-                        setFoodDatabase([...foodDatabase, ...data]); showToast(`${data.length} Items geladen.`);
+                        setFoodDatabase([...foodDatabase, ...data]); showToast("CSV geladen!");
                     } catch (err) { showToast("Import-Fehler."); } finally { setIsImporting(false); }
                 };
                 reader.readAsText(file);
             };
 
-            const handleSaveLogEdit = () => {
-                if (editingLog) {
-                    setLogs(logs.map(l => l.id === editingLog.id ? { ...l, amount } : l));
-                    setEditingLog(null); setAmount(100); showToast("Aktualisiert!");
-                } else if (selectedFood) {
-                    addLogEntry(selectedFood, amount);
-                }
-            };
-
-            const handleDbAddSubmit = (e) => {
-                e.preventDefault();
-                const newItem = { id: `manual-${Date.now()}`, name: quickTrack.name || 'Unbenannt', calories: parseFloat(quickTrack.kcal) || 0, protein: parseFloat(quickTrack.protein) || 0, fat: parseFloat(quickTrack.fat) || 0, carbs: parseFloat(quickTrack.carbs) || 0, fiber: parseFloat(quickTrack.fiber) || 0 };
-                setFoodDatabase([newItem, ...foodDatabase]); resetAddState(); showToast("In DB gespeichert!");
-            };
-
-            const clearDatabase = () => {
-                setFoodDatabase([]);
-                setShowClearDbConfirm(false);
-                showToast("Datenbank vollständig geleert!");
-            };
+            const clearDatabase = () => { setFoodDatabase([]); setShowClearDbConfirm(false); showToast("DB geleert."); };
 
             return (
                 <div className="min-h-screen max-w-md mx-auto relative shadow-2xl bg-white lg:bg-slate-50">
@@ -434,10 +420,25 @@
                                 <div className="space-y-10 pb-8">
                                     {MEAL_CATEGORIES.map(cat => {
                                         const mealLogs = dailyLogsTotal.filter(l => l.category === cat);
+                                        // Nährwerte für diese Kategorie berechnen
+                                        const mealTotals = mealLogs.reduce((acc, curr) => ({
+                                            calories: acc.calories + (curr.calories * (curr.amount / 100)),
+                                            protein: acc.protein + (curr.protein * (curr.amount / 100)),
+                                            carbs: acc.carbs + (curr.carbs * (curr.amount / 100)),
+                                            fat: acc.fat + (curr.fat * (curr.amount / 100)),
+                                        }), { calories: 0, protein: 0, carbs: 0, fat: 0 });
+
                                         return (
                                             <div key={cat} className="space-y-4">
                                                 <div className="flex justify-between items-center px-2">
-                                                    <h3 className="font-black text-lg text-slate-800">{cat}</h3>
+                                                    <div className="flex items-center gap-2">
+                                                        <h3 className="font-black text-lg text-slate-800">{cat}</h3>
+                                                        {mealLogs.length > 0 && (
+                                                            <span className="text-[10px] text-slate-400 font-medium lowercase">
+                                                                {Math.round(mealTotals.calories)} kcal • P {Math.round(mealTotals.protein)}g • F {Math.round(mealTotals.fat)}g • C {Math.round(mealTotals.carbs)}g
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                     <div className="flex gap-2">
                                                         <button onClick={() => copyFromYesterday(cat)} className="p-2 text-slate-300 hover:text-blue-600 transition-colors"><Icon name="Copy" size={22}/></button>
                                                         <button onClick={() => { setCurrentAddCategory(cat); setShowAddModal(true); }} className="bg-blue-600 text-white w-10 h-10 rounded-2xl flex items-center justify-center shadow-lg active:scale-95 transition-all"><Icon name="Plus" size={24}/></button>
@@ -487,15 +488,7 @@
                                         </button>
                                         <input type="file" ref={fileInputRef} className="hidden" accept=".csv" onChange={handleFileUpload} />
                                     </div>
-                                    {/* DB LEEREN BUTTON WIEDER DA */}
-                                    {foodDatabase.length > 0 && (
-                                        <button 
-                                            onClick={() => setShowClearDbConfirm(true)} 
-                                            className="w-full bg-white text-rose-500 border border-rose-100 font-black py-2 rounded-xl text-[10px] uppercase tracking-widest active:bg-rose-50 transition-all"
-                                        >
-                                            Datenbank leeren ({foodDatabase.length})
-                                        </button>
-                                    )}
+                                    {foodDatabase.length > 0 && <button onClick={() => setShowClearDbConfirm(true)} className="w-full bg-white text-rose-500 border border-rose-100 font-black py-2 rounded-xl text-[10px] uppercase tracking-widest active:bg-rose-50 transition-all">Datenbank leeren ({foodDatabase.length})</button>}
                                 </div>
                                 <div className="space-y-3">
                                     {filteredDatabaseView.slice(0, 100).map(item => (
@@ -504,9 +497,9 @@
                                                 <h4 className="font-black text-slate-800 text-sm mb-1">{item.name}</h4>
                                                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">100g: <span className="text-orange-500 font-black">{Math.round(item.calories)} kcal</span> • P: {item.protein}g</p>
                                             </div>
-                                            <div className="flex gap-1 ml-4 transition-opacity duration-200">
+                                            <div className="flex gap-1 ml-4">
                                                 <button onClick={() => setEditingDbItem({...item})} className="p-2 text-slate-200 hover:text-blue-500"><Icon name="Pencil" size={18}/></button>
-                                                <button onClick={() => { if(confirm('Löschen?')) setFoodDatabase(foodDatabase.filter(i => i.id !== item.id)); }} className="p-2 text-slate-200 hover:text-rose-500"><Icon name="Trash2" size={18}/></button>
+                                                <button onClick={() => setItemToDelete(item)} className="p-2 text-slate-200 hover:text-rose-500"><Icon name="Trash2" size={18}/></button>
                                             </div>
                                         </div>
                                     ))}
@@ -532,7 +525,46 @@
                         )}
                     </main>
 
-                    {/* MODAL: ADD WITH TABS (Zentriert & Symmetrisch) */}
+                    {/* LÖSCH-BESTÄTIGUNG EINZELNES ITEM */}
+                    {itemToDelete && (
+                        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+                            <div className="bg-white w-full max-w-sm rounded-[48px] p-10 text-center shadow-2xl animate-modal">
+                                <div className="bg-rose-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 text-rose-500"><Icon name="Trash2" size={40} /></div>
+                                <h3 className="text-xl font-black text-slate-800 mb-2">Eintrag löschen?</h3>
+                                <p className="text-slate-500 text-sm mb-8">Möchtest du <b>{itemToDelete.name}</b> wirklich entfernen?</p>
+                                <div className="flex flex-col gap-3">
+                                    <button onClick={() => { setFoodDatabase(foodDatabase.filter(i => i.id !== itemToDelete.id)); setItemToDelete(null); showToast("Gelöscht!"); }} className="w-full bg-rose-500 text-white font-black py-4 rounded-[24px] uppercase text-sm">Löschen</button>
+                                    <button onClick={() => setItemToDelete(null)} className="w-full bg-slate-50 text-slate-400 font-black py-4 rounded-[24px] uppercase text-sm">Abbrechen</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* BEARBEITEN-MODAL DB ITEM */}
+                    {editingDbItem && (
+                        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-md z-[60] flex items-center justify-center p-4">
+                            <div className="bg-white w-full max-w-md h-[620px] rounded-[48px] p-8 shadow-2xl animate-modal overflow-hidden flex flex-col">
+                                <div className="flex justify-between items-center mb-6 flex-shrink-0"><h3 className="text-2xl font-black">DB bearbeiten</h3><button onClick={() => setEditingDbItem(null)} className="bg-slate-100 p-2.5 rounded-full"><Icon name="X" size={20}/></button></div>
+                                <div className="flex-1 overflow-y-auto custom-scrollbar">
+                                    <form onSubmit={(e) => { e.preventDefault(); setFoodDatabase(foodDatabase.map(i => i.id === editingDbItem.id ? editingDbItem : i)); setEditingDbItem(null); showToast("DB aktualisiert!"); }} className="space-y-6 pb-4">
+                                        <div><label className="text-[10px] font-black text-slate-400 uppercase ml-2 mb-2 block tracking-widest">Name</label><input type="text" className="w-full bg-slate-50 rounded-2xl p-4 font-bold border outline-none shadow-inner" value={editingDbItem.name} onChange={e => setEditingDbItem({...editingDbItem, name: e.target.value})}/></div>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div><label className="text-[10px] font-black uppercase mb-1 block ml-2 text-slate-400">kcal / 100g</label><input type="number" className="w-full bg-slate-50 rounded-2xl p-4 font-black border outline-none" value={editingDbItem.calories} onChange={e => setEditingDbItem({...editingDbItem, calories: parseFloat(e.target.value)||0})}/></div>
+                                            <div><label className="text-[10px] font-black uppercase mb-1 block ml-2 text-slate-400">Protein (g)</label><input type="number" step="0.1" className="w-full bg-slate-50 rounded-2xl p-4 font-black border outline-none" value={editingDbItem.protein} onChange={e => setEditingDbItem({...editingDbItem, protein: parseFloat(e.target.value)||0})}/></div>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div><label className="text-[10px] font-black uppercase mb-1 block ml-2 text-slate-400">Fett (g)</label><input type="number" step="0.1" className="w-full bg-slate-50 rounded-2xl p-4 font-black border outline-none" value={editingDbItem.fat} onChange={e => setEditingDbItem({...editingDbItem, fat: parseFloat(e.target.value)||0})}/></div>
+                                            <div><label className="text-[10px] font-black uppercase mb-1 block ml-2 text-slate-400">Carbs (g)</label><input type="number" step="0.1" className="w-full bg-slate-50 rounded-2xl p-4 font-black border outline-none" value={editingDbItem.carbs} onChange={e => setEditingDbItem({...editingDbItem, carbs: parseFloat(e.target.value)||0})}/></div>
+                                        </div>
+                                        <div><label className="text-[10px] font-black uppercase mb-1 block ml-2 text-slate-400">Ballastst. (g)</label><input type="number" step="0.1" className="w-full bg-slate-50 rounded-2xl p-4 font-black border outline-none" value={editingDbItem.fiber || 0} onChange={e => setEditingDbItem({...editingDbItem, fiber: parseFloat(e.target.value)||0})}/></div>
+                                        <button type="submit" className="w-full bg-blue-600 text-white font-black py-5 rounded-3xl shadow-xl uppercase tracking-widest active:scale-95 transition-all">Speichern</button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ADD MODAL MIT TABS */}
                     {showAddModal && (
                         <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-md z-50 flex items-center justify-center p-4">
                             <div className="bg-white w-full max-w-md h-[620px] rounded-[48px] p-8 shadow-2xl animate-modal overflow-hidden flex flex-col">
@@ -547,11 +579,7 @@
                                         { id: 'ai', label: 'KI', icon: 'BrainCircuit' },
                                         { id: 'history', label: 'Verlauf', icon: 'History' }
                                     ].map(tab => (
-                                        <button 
-                                            key={tab.id} 
-                                            onClick={() => setModalTab(tab.id)} 
-                                            className={`flex-1 flex flex-col sm:flex-row items-center justify-center gap-1 py-2 px-1 rounded-xl text-[8px] sm:text-[10px] font-black uppercase transition-all ${modalTab === tab.id ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}
-                                        >
+                                        <button key={tab.id} onClick={() => setModalTab(tab.id)} className={`flex-1 flex flex-col sm:flex-row items-center justify-center gap-1 py-2 px-1 rounded-xl text-[8px] sm:text-[10px] font-black uppercase transition-all ${modalTab === tab.id ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}>
                                             <Icon name={tab.icon} size={14}/>
                                             <span className="truncate">{tab.label}</span>
                                         </button>
@@ -632,34 +660,22 @@
                         </div>
                     )}
 
-                    {/* MODAL: CLEAR DB (WIEDER DA) */}
+                    {/* MODAL: CLEAR DB CONFIRMATION */}
                     {showClearDbConfirm && (
                         <div className="fixed inset-0 bg-slate-900/95 backdrop-blur-md z-[100] flex items-center justify-center p-4">
                             <div className="bg-white w-full max-w-sm rounded-[48px] p-10 text-center shadow-2xl animate-modal">
-                                <div className="bg-rose-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 text-rose-500">
-                                    <Icon name="AlertTriangle" size={40} />
-                                </div>
+                                <div className="bg-rose-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 text-rose-500"><Icon name="AlertTriangle" size={40} /></div>
                                 <h3 className="text-2xl font-black text-slate-800 mb-2">Datenbank leeren?</h3>
-                                <p className="text-slate-500 text-sm mb-8 leading-relaxed">Möchtest du wirklich alle <b>{foodDatabase.length} Einträge</b> unwiderruflich löschen?</p>
+                                <p className="text-slate-500 text-sm mb-8">Wirklich alle <b>{foodDatabase.length} Einträge</b> löschen?</p>
                                 <div className="flex flex-col gap-3">
-                                    <button 
-                                        onClick={clearDatabase} 
-                                        className="w-full bg-rose-500 text-white font-black py-5 rounded-[24px] shadow-xl shadow-rose-100 uppercase tracking-widest"
-                                    >
-                                        Ja, Alles Löschen
-                                    </button>
-                                    <button 
-                                        onClick={() => setShowClearDbConfirm(false)} 
-                                        className="w-full bg-slate-50 text-slate-400 font-black py-5 rounded-[24px] uppercase tracking-widest"
-                                    >
-                                        Abbrechen
-                                    </button>
+                                    <button onClick={clearDatabase} className="w-full bg-rose-500 text-white font-black py-5 rounded-[24px] shadow-xl uppercase text-sm">Ja, Alles Löschen</button>
+                                    <button onClick={() => setShowClearDbConfirm(false)} className="w-full bg-slate-50 text-slate-400 font-black py-5 rounded-[24px] uppercase text-sm">Abbrechen</button>
                                 </div>
                             </div>
                         </div>
                     )}
 
-                    {/* PORTION / EDIT LOG (Zentriert) */}
+                    {/* PORTION / EDIT LOG */}
                     {(selectedFood || editingLog) && (
                         <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-md z-[60] flex items-center justify-center p-4">
                             <div className="bg-white w-full max-w-sm rounded-[56px] p-10 shadow-2xl animate-modal">
