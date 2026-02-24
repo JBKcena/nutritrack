@@ -13,7 +13,7 @@
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         .custom-scrollbar::-webkit-scrollbar { width: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #10b981; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #3b82f6; border-radius: 10px; }
         
         #loader {
             position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
@@ -25,7 +25,8 @@
         }
         @keyframes spin { to { transform: rotate(360deg); } }
         @keyframes slideUp { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-        .animate-slide-up { animation: slideUp 0.3s ease-out; }
+        @keyframes modalAppear { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        .animate-modal { animation: modalAppear 0.2s ease-out; }
     </style>
 </head>
 <body class="bg-slate-50">
@@ -73,6 +74,7 @@
                     </React.Fragment>
                 ),
                 Upload: <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4m14-7-5-5-5 5m5-5v12"/>,
+                Download: <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4m7-5 5 5 5-5m-5 5V3"/>,
                 X: <path d="M18 6 6 18M6 6l12 12"/>,
                 Sparkles: (
                     <React.Fragment>
@@ -97,11 +99,23 @@
                         <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
                     </React.Fragment>
                 ),
+                History: (
+                    <React.Fragment>
+                        <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+                        <path d="M3 3v5h5"/><path d="M12 7v5l4 2"/>
+                    </React.Fragment>
+                ),
                 Pencil: <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>,
                 Camera: (
                     <React.Fragment>
                         <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/>
                         <circle cx="12" cy="13" r="3"/>
+                    </React.Fragment>
+                ),
+                AlertTriangle: (
+                    <React.Fragment>
+                        <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
+                        <path d="M12 9v4"/><path d="M12 17h.01"/>
                     </React.Fragment>
                 )
             };
@@ -118,7 +132,6 @@
             const percentage = (value / target) * 100;
             const strokeDashoffset = circumference - (Math.min(percentage, 100) / 100) * circumference;
             const isOver = percentage > 100;
-            
             const colorClass = isOver ? "text-rose-400" : "text-emerald-400";
 
             return (
@@ -147,10 +160,10 @@
             const getDayIndex = (dateStr) => new Date(dateStr).getDay();
 
             // --- State ---
-            const [logs, setLogs] = useState(() => JSON.parse(localStorage.getItem('nt_v24_logs')) || []);
-            const [foodDatabase, setFoodDatabase] = useState(() => JSON.parse(localStorage.getItem('nt_v24_db')) || []);
+            const [logs, setLogs] = useState(() => JSON.parse(localStorage.getItem('nt_v30_logs')) || []);
+            const [foodDatabase, setFoodDatabase] = useState(() => JSON.parse(localStorage.getItem('nt_v30_db')) || []);
             const [goals, setGoals] = useState(() => {
-                const s = localStorage.getItem('nt_v24_goals');
+                const s = localStorage.getItem('nt_v30_goals');
                 if (s) return JSON.parse(s);
                 const d = { calories: 2192, protein: 150, carbs: 250, fat: 60, fiber: 30 };
                 const init = {}; [0,1,2,3,4,5,6].forEach(i => init[i] = {...d});
@@ -164,7 +177,9 @@
             const [showSettings, setShowSettings] = useState(false);
             const [settingsDay, setSettingsDay] = useState(getDayIndex(getTodayStr()));
             const [showAddModal, setShowAddModal] = useState(false);
+            const [modalTab, setModalTab] = useState('quick');
             const [showDbAddModal, setShowDbAddModal] = useState(false);
+            const [showClearDbConfirm, setShowClearDbConfirm] = useState(false);
             const [notification, setNotification] = useState(null);
             const [isImporting, setIsImporting] = useState(false);
             const [isScanning, setIsScanning] = useState(false);
@@ -181,19 +196,19 @@
             const [aiPrompt, setAiPrompt] = useState('');
             const [quickTrack, setQuickTrack] = useState({ name: '', protein: '', fat: '', carbs: '', fiber: '', kcal: '' });
             const [isAiLoading, setIsAiLoading] = useState(false);
-            const [aiSuggestions, setAiSuggestions] = useState(null);
 
             const fileInputRef = useRef(null);
             const cameraInputRef = useRef(null);
+            const backupFileRef = useRef(null);
 
             useEffect(() => {
                 const l = document.getElementById('loader');
                 if (l) { l.style.opacity = '0'; setTimeout(() => l.remove(), 500); }
             }, []);
 
-            useEffect(() => localStorage.setItem('nt_v24_logs', JSON.stringify(logs)), [logs]);
-            useEffect(() => localStorage.setItem('nt_v24_db', JSON.stringify(foodDatabase)), [foodDatabase]);
-            useEffect(() => localStorage.setItem('nt_v24_goals', JSON.stringify(goals)), [goals]);
+            useEffect(() => localStorage.setItem('nt_v30_logs', JSON.stringify(logs)), [logs]);
+            useEffect(() => localStorage.setItem('nt_v30_db', JSON.stringify(foodDatabase)), [foodDatabase]);
+            useEffect(() => localStorage.setItem('nt_v30_goals', JSON.stringify(goals)), [goals]);
 
             const currentDayGoals = goals[getDayIndex(selectedDate)] || { calories: 2000, protein: 150, carbs: 250, fat: 60, fiber: 30 };
             const dailyLogsTotal = logs.filter(log => log.date === selectedDate);
@@ -210,24 +225,43 @@
             const filteredSearch = searchQuery.length >= 2 ? foodDatabase.filter(i => i.name.toLowerCase().includes(searchQuery.toLowerCase())).slice(0, 30) : [];
             const filteredDatabaseView = foodDatabase.filter(i => i.name.toLowerCase().includes(dbSearchQuery.toLowerCase()));
             const loggedDays = new Set(logs.map(l => l.date));
+            
+            const recentItems = useMemo(() => {
+                const map = new Map();
+                [...logs].reverse().forEach(l => {
+                    if (!map.has(l.name)) {
+                        map.set(l.name, { 
+                            name: l.name, calories: l.calories, protein: l.protein, 
+                            fat: l.fat, carbs: l.carbs, fiber: l.fiber 
+                        });
+                    }
+                });
+                return Array.from(map.values()).slice(0, 15);
+            }, [logs]);
+
             const showToast = (m) => { setNotification(m); setTimeout(() => setNotification(null), 3000); };
 
             const resetAddState = () => {
-                setShowAddModal(false); setShowDbAddModal(false); setSelectedFood(null); setEditingLog(null); setSearchQuery(''); setAmount(100); setCalcMode('per100g'); setAiPrompt(''); setQuickTrack({ name: '', protein: '', fat: '', carbs: '', fiber: '', kcal: '' });
+                setShowAddModal(false); setShowDbAddModal(false); setSelectedFood(null); setEditingLog(null); 
+                setSearchQuery(''); setAmount(100); setCalcMode('per100g'); setAiPrompt(''); 
+                setQuickTrack({ name: '', protein: '', fat: '', carbs: '', fiber: '', kcal: '' });
+                setModalTab('quick');
             };
 
-            const addLogEntry = (f, g) => {
-                setLogs([{ ...f, id: Date.now(), amount: g, date: selectedDate, category: currentAddCategory, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }, ...logs]);
+            const addLogEntry = (f, g, cat = currentAddCategory) => {
+                setLogs([{ ...f, id: Date.now(), amount: g, date: selectedDate, category: cat, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }, ...logs]);
                 resetAddState(); showToast("Hinzugefügt!");
             };
 
-            const handleSaveLogEdit = () => {
-                if (editingLog) {
-                    setLogs(logs.map(l => l.id === editingLog.id ? { ...l, amount } : l));
-                    setEditingLog(null); setAmount(100); showToast("Aktualisiert!");
-                } else if (selectedFood) {
-                    addLogEntry(selectedFood, amount);
-                }
+            const copyFromYesterday = (cat) => {
+                const yesterday = new Date(selectedDate);
+                yesterday.setDate(yesterday.getDate() - 1);
+                const yDateStr = yesterday.toISOString().split('T')[0];
+                const items = logs.filter(l => l.date === yDateStr && l.category === cat);
+                if (items.length === 0) { showToast("Nichts von gestern gefunden."); return; }
+                const newItems = items.map(i => ({ ...i, id: Date.now() + Math.random(), date: selectedDate }));
+                setLogs([...newItems, ...logs]);
+                showToast(`${items.length} Einträge kopiert!`);
             };
 
             const handleQuickTrackSubmit = (e) => {
@@ -244,28 +278,6 @@
                     fiber: parseFloat(quickTrack.fiber || 0) * factor
                 };
                 addLogEntry(foodData, g);
-            };
-
-            const handleFileUpload = (e) => {
-                const file = e.target.files[0];
-                if (!file) return;
-                setIsImporting(true);
-                const reader = new FileReader();
-                reader.onload = (event) => {
-                    try {
-                        const rows = event.target.result.split(/\r?\n/);
-                        const header = rows[0].split(';');
-                        const find = (s) => header.findIndex(h => h.toLowerCase().includes(s.toLowerCase()));
-                        const idx = { n: find('Lebensmittelbezeichnung'), k: find('Energie'), p: find('Protein'), f: find('Fett'), c: find('Kohlenhydrate'), b: find('Ballaststoffe') };
-                        const data = rows.slice(1).map((r, i) => {
-                            const c = r.split(';'); if (c.length < 5 || !c[idx.n]) return null;
-                            const cv = (v) => v ? parseFloat(v.replace(/"/g, '').replace(',', '.')) || 0 : 0;
-                            return { id: `bls-${i}-${Date.now()}`, name: c[idx.n].replace(/"/g, ''), calories: cv(c[idx.k]), protein: cv(c[idx.p]), fat: cv(c[idx.f]), carbs: cv(c[idx.c]), fiber: cv(c[idx.b]) };
-                        }).filter(x => x);
-                        setFoodDatabase([...foodDatabase, ...data]); showToast(`${data.length} Items geladen.`);
-                    } catch (err) { showToast("Import-Fehler."); } finally { setIsImporting(false); }
-                };
-                reader.readAsText(file);
             };
 
             const handleAiAnalyzeRecipe = async () => {
@@ -311,20 +323,71 @@
                 reader.readAsDataURL(file);
             };
 
+            const exportData = () => {
+                const data = JSON.stringify({ logs, foodDatabase, goals });
+                const blob = new Blob([data], { type: 'text/plain' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a'); a.href = url; a.download = `nutritrack_backup_${getTodayStr()}.txt`; a.click();
+                showToast("Backup heruntergeladen!");
+            };
+
+            const importData = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    try {
+                        const imported = JSON.parse(event.target.result);
+                        if (imported.logs) setLogs(imported.logs);
+                        if (imported.foodDatabase) setFoodDatabase(imported.foodDatabase);
+                        if (imported.goals) setGoals(imported.goals);
+                        showToast("Backup erfolgreich geladen!");
+                    } catch (err) { showToast("Fehler beim Laden."); }
+                };
+                reader.readAsText(file);
+            };
+
+            const handleFileUpload = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                setIsImporting(true);
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    try {
+                        const rows = event.target.result.split(/\r?\n/);
+                        const header = rows[0].split(';');
+                        const find = (s) => header.findIndex(h => h.toLowerCase().includes(s.toLowerCase()));
+                        const idx = { n: find('Lebensmittelbezeichnung'), k: find('Energie'), p: find('Protein'), f: find('Fett'), c: find('Kohlenhydrate'), b: find('Ballaststoffe') };
+                        const data = rows.slice(1).map((r, i) => {
+                            const c = r.split(';'); if (c.length < 5 || !c[idx.n]) return null;
+                            const cv = (v) => v ? parseFloat(v.replace(/"/g, '').replace(',', '.')) || 0 : 0;
+                            return { id: `bls-${i}-${Date.now()}`, name: c[idx.n].replace(/"/g, ''), calories: cv(c[idx.k]), protein: cv(c[idx.p]), fat: cv(c[idx.f]), carbs: cv(c[idx.c]), fiber: cv(c[idx.b]) };
+                        }).filter(x => x);
+                        setFoodDatabase([...foodDatabase, ...data]); showToast(`${data.length} Items geladen.`);
+                    } catch (err) { showToast("Import-Fehler."); } finally { setIsImporting(false); }
+                };
+                reader.readAsText(file);
+            };
+
+            const handleSaveLogEdit = () => {
+                if (editingLog) {
+                    setLogs(logs.map(l => l.id === editingLog.id ? { ...l, amount } : l));
+                    setEditingLog(null); setAmount(100); showToast("Aktualisiert!");
+                } else if (selectedFood) {
+                    addLogEntry(selectedFood, amount);
+                }
+            };
+
             const handleDbAddSubmit = (e) => {
                 e.preventDefault();
-                const newItem = {
-                    id: `manual-${Date.now()}`,
-                    name: quickTrack.name || 'Unbenannt',
-                    calories: parseFloat(quickTrack.kcal) || 0,
-                    protein: parseFloat(quickTrack.protein) || 0,
-                    fat: parseFloat(quickTrack.fat) || 0,
-                    carbs: parseFloat(quickTrack.carbs) || 0,
-                    fiber: parseFloat(quickTrack.fiber) || 0
-                };
-                setFoodDatabase([newItem, ...foodDatabase]);
-                resetAddState();
-                showToast("In DB gespeichert!");
+                const newItem = { id: `manual-${Date.now()}`, name: quickTrack.name || 'Unbenannt', calories: parseFloat(quickTrack.kcal) || 0, protein: parseFloat(quickTrack.protein) || 0, fat: parseFloat(quickTrack.fat) || 0, carbs: parseFloat(quickTrack.carbs) || 0, fiber: parseFloat(quickTrack.fiber) || 0 };
+                setFoodDatabase([newItem, ...foodDatabase]); resetAddState(); showToast("In DB gespeichert!");
+            };
+
+            const clearDatabase = () => {
+                setFoodDatabase([]);
+                setShowClearDbConfirm(false);
+                showToast("Datenbank vollständig geleert!");
             };
 
             return (
@@ -351,29 +414,15 @@
                                     <button onClick={() => setSelectedDate(d => { const date = new Date(d); date.setDate(date.getDate()+1); return date.toISOString().split('T')[0]; })} className="p-2 bg-white rounded-xl shadow-sm border"><Icon name="ChevronRight" size={18}/></button>
                                 </div>
 
-                                {/* BLAUES DASHBOARD MIT BALKEN UND 3D EFFEKT */}
                                 <section className="bg-gradient-to-br from-blue-600 to-indigo-700 text-white rounded-[40px] p-8 shadow-[0_20px_50px_rgba(37,99,235,0.3),inset_0_-8px_12px_rgba(0,0,0,0.15),inset_0_4px_8px_rgba(255,255,255,0.2)] relative overflow-hidden">
                                     <div className="absolute top-0 left-0 w-full h-1/2 bg-gradient-to-b from-white/10 to-transparent pointer-events-none"></div>
-                                    
                                     <div className="text-center mb-6 relative z-10">
-                                        <p className="text-[10px] font-black uppercase text-blue-200 tracking-[0.2em] mb-1">Verbleibende Energie</p>
-                                        <h2 className="text-5xl font-black tracking-tight drop-shadow-sm">
-                                            {Math.round(currentDayGoals.calories - totals.calories)} <span className="text-lg text-blue-300 font-medium ml-1">kcal</span>
-                                        </h2>
-                                        
-                                        {/* NEU: Kalorien-Fortschrittsbalken */}
+                                        <p className="text-[10px] font-black uppercase text-blue-200 tracking-[0.2em] mb-1">Verbleibend</p>
+                                        <h2 className="text-5xl font-black tracking-tight">{Math.round(currentDayGoals.calories - totals.calories)} <span className="text-lg text-blue-300 font-medium">kcal</span></h2>
                                         <div className="w-full h-4 bg-white/15 rounded-full mt-6 shadow-inner relative overflow-hidden">
-                                            <div 
-                                                className={`h-full rounded-full transition-all duration-1000 ease-out ${consumedPercentage > 100 ? 'bg-rose-400' : 'bg-emerald-400'}`} 
-                                                style={{ width: `${Math.min(consumedPercentage, 100)}%` }}
-                                            />
-                                        </div>
-                                        <div className="flex justify-between mt-2 px-1">
-                                            <span className="text-[9px] font-black text-blue-200 uppercase tracking-widest">{Math.round(totals.calories)} kcal gegessen</span>
-                                            <span className="text-[9px] font-black text-blue-200 uppercase tracking-widest">Ziel: {currentDayGoals.calories}</span>
+                                            <div className={`h-full rounded-full transition-all duration-1000 ${consumedPercentage > 100 ? 'bg-rose-400' : 'bg-emerald-400'}`} style={{ width: `${Math.min(consumedPercentage, 100)}%` }} />
                                         </div>
                                     </div>
-                                    
                                     <div className="grid grid-cols-4 gap-2 relative z-10 pt-4 border-t border-white/10">
                                         <CircularProgress label="Prot" value={totals.protein} target={currentDayGoals.protein} />
                                         <CircularProgress label="Fett" value={totals.fat} target={currentDayGoals.fat} />
@@ -389,10 +438,13 @@
                                             <div key={cat} className="space-y-4">
                                                 <div className="flex justify-between items-center px-2">
                                                     <h3 className="font-black text-lg text-slate-800">{cat}</h3>
-                                                    <button onClick={() => { setCurrentAddCategory(cat); setShowAddModal(true); }} className="bg-blue-600 text-white w-10 h-10 rounded-2xl flex items-center justify-center shadow-lg active:scale-95 transition-all"><Icon name="Plus" size={24}/></button>
+                                                    <div className="flex gap-2">
+                                                        <button onClick={() => copyFromYesterday(cat)} className="p-2 text-slate-300 hover:text-blue-600 transition-colors"><Icon name="Copy" size={22}/></button>
+                                                        <button onClick={() => { setCurrentAddCategory(cat); setShowAddModal(true); }} className="bg-blue-600 text-white w-10 h-10 rounded-2xl flex items-center justify-center shadow-lg active:scale-95 transition-all"><Icon name="Plus" size={24}/></button>
+                                                    </div>
                                                 </div>
                                                 <div className="space-y-3 px-2">
-                                                    {mealLogs.length === 0 ? <div className="p-8 text-center text-slate-300 border-2 border-dashed rounded-[32px] text-xs italic">Noch nichts</div> : 
+                                                    {mealLogs.length === 0 ? <div className="p-8 text-center text-slate-300 border-2 border-dashed rounded-[32px] text-xs italic">Nichts getrackt</div> : 
                                                         mealLogs.map(item => (
                                                             <div key={item.id} className="bg-white p-5 rounded-3xl shadow-sm border flex justify-between items-center animate-in fade-in">
                                                                 <div className="flex-1">
@@ -404,12 +456,8 @@
                                                                     </div>
                                                                 </div>
                                                                 <div className="flex gap-1 ml-4">
-                                                                    <button onClick={() => { setCurrentAddCategory(cat); setEditingLog(item); setAmount(item.amount); }} className="p-2 text-slate-200 hover:text-blue-500 transition-colors">
-                                                                        <Icon name="Pencil" size={18}/>
-                                                                    </button>
-                                                                    <button onClick={() => setLogs(logs.filter(l => l.id !== item.id))} className="p-2 text-slate-200 hover:text-rose-500 transition-colors">
-                                                                        <Icon name="Trash2" size={18}/>
-                                                                    </button>
+                                                                    <button onClick={() => { setCurrentAddCategory(cat); setEditingLog(item); setAmount(item.amount); }} className="p-2 text-slate-200 hover:text-blue-500 transition-colors"><Icon name="Pencil" size={18}/></button>
+                                                                    <button onClick={() => setLogs(logs.filter(l => l.id !== item.id))} className="p-2 text-slate-200 hover:text-rose-500 transition-colors"><Icon name="Trash2" size={18}/></button>
                                                                 </div>
                                                             </div>
                                                         ))
@@ -439,12 +487,27 @@
                                         </button>
                                         <input type="file" ref={fileInputRef} className="hidden" accept=".csv" onChange={handleFileUpload} />
                                     </div>
+                                    {/* DB LEEREN BUTTON WIEDER DA */}
+                                    {foodDatabase.length > 0 && (
+                                        <button 
+                                            onClick={() => setShowClearDbConfirm(true)} 
+                                            className="w-full bg-white text-rose-500 border border-rose-100 font-black py-2 rounded-xl text-[10px] uppercase tracking-widest active:bg-rose-50 transition-all"
+                                        >
+                                            Datenbank leeren ({foodDatabase.length})
+                                        </button>
+                                    )}
                                 </div>
                                 <div className="space-y-3">
                                     {filteredDatabaseView.slice(0, 100).map(item => (
-                                        <div key={item.id} className="bg-white p-5 rounded-3xl shadow-sm border flex justify-between items-center">
-                                            <div className="flex-1 font-black text-sm">{item.name}<p className="text-[10px] font-bold text-slate-400 uppercase">100g: {Math.round(item.calories)} kcal • P: {item.protein}g</p></div>
-                                            <div className="flex gap-1 ml-4"><button onClick={() => setEditingDbItem({...item})} className="p-2 text-slate-200"><Icon name="Pencil" size={18}/></button><button onClick={() => setFoodDatabase(foodDatabase.filter(i => i.id !== item.id))} className="p-2 text-slate-200"><Icon name="Trash2" size={18}/></button></div>
+                                        <div key={item.id} className="bg-white p-5 rounded-3xl shadow-sm border flex justify-between items-center group">
+                                            <div className="flex-1">
+                                                <h4 className="font-black text-slate-800 text-sm mb-1">{item.name}</h4>
+                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">100g: <span className="text-orange-500 font-black">{Math.round(item.calories)} kcal</span> • P: {item.protein}g</p>
+                                            </div>
+                                            <div className="flex gap-1 ml-4 transition-opacity duration-200">
+                                                <button onClick={() => setEditingDbItem({...item})} className="p-2 text-slate-200 hover:text-blue-500"><Icon name="Pencil" size={18}/></button>
+                                                <button onClick={() => { if(confirm('Löschen?')) setFoodDatabase(foodDatabase.filter(i => i.id !== item.id)); }} className="p-2 text-slate-200 hover:text-rose-500"><Icon name="Trash2" size={18}/></button>
+                                            </div>
                                         </div>
                                     ))}
                                 </div>
@@ -461,7 +524,7 @@
                                         return dArr.map((date, i) => {
                                             if(!date) return <div key={i}/>;
                                             const ds = date.toISOString().split('T')[0];
-                                            return (<button key={ds} onClick={() => { setSelectedDate(ds); setActiveTab('diary'); }} className={`aspect-square flex flex-col items-center justify-center rounded-2xl text-sm font-black relative active:scale-90 transition-all ${ds === selectedDate ? 'bg-blue-600 text-white shadow-lg' : 'hover:bg-slate-50'}`}>{date.getDate()}{loggedDays.has(ds) && <div className={`w-1.5 h-1.5 rounded-full mt-1 ${ds === selectedDate ? 'bg-white' : 'bg-blue-500'}`}/>}</button>);
+                                            return (<button key={ds} onClick={() => { setSelectedDate(ds); setActiveTab('diary'); }} className={`aspect-square flex flex-col items-center justify-center rounded-2xl text-sm font-black relative active:scale-90 transition-all ${ds === selectedDate ? 'bg-blue-600 text-white shadow-lg' : 'hover:bg-slate-50'}`}>{date.getDate()}{loggedDays.has(ds) && <div className={`w-1.5 h-1.5 rounded-full mt-1 ${ds === selectedDate ? 'bg-white' : 'bg-emerald-500'}`}/>}</button>);
                                         });
                                     })()}
                                 </div>
@@ -469,76 +532,168 @@
                         )}
                     </main>
 
-                    {/* MODAL: DB ADD / CAMERA SCAN */}
-                    {showDbAddModal && (
-                        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-md z-50 flex items-end justify-center p-4">
-                            <div className="bg-white w-full max-w-md rounded-[48px] p-8 max-h-[90vh] overflow-y-auto custom-scrollbar animate-slide-up">
-                                <div className="flex justify-between items-center mb-8 sticky top-0 bg-white z-10 pb-2"><h3 className="text-2xl font-black">Neuer Eintrag</h3><button onClick={resetAddState} className="bg-slate-100 p-2.5 rounded-full"><Icon name="X" size={20}/></button></div>
-                                <div className="flex gap-4 mb-8">
-                                    <input type="file" ref={cameraInputRef} className="hidden" accept="image/*" capture="environment" onChange={handleCameraScan} />
-                                    <button onClick={() => cameraInputRef.current.click()} disabled={isScanning} className="flex-1 bg-blue-50 text-blue-600 border border-blue-100 p-6 rounded-3xl flex flex-col items-center gap-3 active:scale-95 transition-all">
-                                        {isScanning ? (
-                                            <Icon name="Loader2" size={32} className="animate-spin"/>
-                                        ) : (
-                                            <React.Fragment>
-                                                <Icon name="Camera" size={32}/>
-                                                <span className="text-[10px] font-black uppercase text-center tracking-widest">Nährwerte scannen ✨</span>
-                                            </React.Fragment>
+                    {/* MODAL: ADD WITH TABS (Zentriert & Symmetrisch) */}
+                    {showAddModal && (
+                        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-md z-50 flex items-center justify-center p-4">
+                            <div className="bg-white w-full max-w-md h-[620px] rounded-[48px] p-8 shadow-2xl animate-modal overflow-hidden flex flex-col">
+                                <div className="flex justify-between items-center mb-6 flex-shrink-0">
+                                    <div><h3 className="text-2xl font-black">Eintragen</h3><p className="text-[10px] font-black uppercase text-blue-600 tracking-widest">{currentAddCategory}</p></div>
+                                    <button onClick={resetAddState} className="bg-slate-100 p-2.5 rounded-full"><Icon name="X" size={20}/></button>
+                                </div>
+                                <div className="flex bg-slate-100 p-1 rounded-2xl mb-6 flex-shrink-0 w-full overflow-hidden">
+                                    {[
+                                        { id: 'quick', label: 'Manuell', icon: 'Plus' },
+                                        { id: 'db', label: 'Aus DB', icon: 'Search' },
+                                        { id: 'ai', label: 'KI', icon: 'BrainCircuit' },
+                                        { id: 'history', label: 'Verlauf', icon: 'History' }
+                                    ].map(tab => (
+                                        <button 
+                                            key={tab.id} 
+                                            onClick={() => setModalTab(tab.id)} 
+                                            className={`flex-1 flex flex-col sm:flex-row items-center justify-center gap-1 py-2 px-1 rounded-xl text-[8px] sm:text-[10px] font-black uppercase transition-all ${modalTab === tab.id ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}
+                                        >
+                                            <Icon name={tab.icon} size={14}/>
+                                            <span className="truncate">{tab.label}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                                <div className="flex-1 overflow-y-auto custom-scrollbar">
+                                    <div className="space-y-6 pb-4">
+                                        {modalTab === 'db' && (
+                                            <div className="relative">
+                                                <div className="bg-slate-50 rounded-3xl flex items-center px-5 border shadow-inner"><Icon name="Search" size={20} className="text-slate-400"/><input type="text" placeholder="Datenbank durchsuchen..." className="w-full bg-transparent p-5 text-sm font-bold outline-none" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}/></div>
+                                                {filteredSearch.length > 0 && (<div className="mt-3 bg-white rounded-3xl border overflow-hidden">{filteredSearch.map(f => (<button key={f.id} onClick={() => { setQuickTrack({ name: f.name, kcal: f.calories || f.kcal, protein: f.protein, fat: f.fat, carbs: f.carbs, fiber: f.fiber }); setModalTab('quick'); }} className="w-full text-left p-5 border-b last:border-b-0 hover:bg-blue-50 font-black text-sm">{f.name}<p className="text-[10px] text-slate-400 uppercase">100g: {Math.round(f.calories || f.kcal)} kcal</p></button>))}</div>)}
+                                            </div>
                                         )}
+                                        {modalTab === 'ai' && (
+                                            <div className="relative">
+                                                <label className="text-[10px] font-black text-slate-400 uppercase ml-2 mb-2 block tracking-widest">Inhalt beschreiben</label>
+                                                <textarea placeholder="z.B. 2 Eier, Avocado, 100g Quark..." className="w-full bg-slate-50 rounded-3xl p-5 text-sm min-h-[120px] border outline-none shadow-inner" value={aiPrompt} onChange={e => setAiPrompt(e.target.value)}/>
+                                                <button type="button" onClick={handleAiAnalyzeRecipe} disabled={isAiLoading} className="mt-2 w-full bg-blue-50 text-blue-600 font-black py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-95 transition-all">{isAiLoading ? <Icon name="Loader2" size={18} className="animate-spin"/> : <Icon name="BrainCircuit" size={18}/>} KI ANALYSIEREN</button>
+                                            </div>
+                                        )}
+                                        {modalTab === 'history' && (
+                                            <div className="space-y-2">
+                                                {recentItems.length === 0 ? <p className="p-10 text-center text-slate-300 italic text-sm font-medium">Noch keine Historie.</p> : 
+                                                    recentItems.map((f, i) => (
+                                                        <button key={i} onClick={() => { setQuickTrack({ ...f, kcal: f.calories }); setModalTab('quick'); }} className="w-full text-left p-4 bg-slate-50 border rounded-2xl hover:bg-blue-50 group flex justify-between items-center transition-all">
+                                                            <div><p className="font-bold text-slate-800 text-sm">{f.name}</p><p className="text-[10px] text-slate-400 uppercase">100g: {Math.round(f.calories)} kcal</p></div>
+                                                            <Icon name="ChevronRight" size={16} className="text-slate-200 group-hover:text-blue-400"/>
+                                                        </button>
+                                                    ))
+                                                }
+                                            </div>
+                                        )}
+                                        {(modalTab === 'quick' || quickTrack.name) && (
+                                            <form onSubmit={handleQuickTrackSubmit} className="space-y-6 animate-in fade-in">
+                                                <div><label className="text-[10px] font-black text-slate-400 uppercase ml-2 mb-2 block tracking-widest">Bezeichnung</label><input type="text" placeholder="Name der Mahlzeit" className="w-full bg-slate-50 rounded-2xl p-4 font-bold border outline-none shadow-inner" value={quickTrack.name} onChange={e => setQuickTrack({...quickTrack, name: e.target.value})}/></div>
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <div><label className="text-[10px] font-black text-slate-400 uppercase mb-1 block ml-2">Menge (g)</label><input type="number" className="w-full bg-slate-50 rounded-2xl p-4 font-black outline-none border" value={amount} onChange={e => setAmount(e.target.value)}/></div>
+                                                    <div><label className="text-[10px] font-black text-slate-400 uppercase mb-1 block ml-2">Modus</label><select className="w-full bg-slate-50 rounded-2xl p-4 font-black border outline-none" value={calcMode} onChange={e => setCalcMode(e.target.value)}><option value="per100g">pro 100g</option><option value="total">Gesamt</option></select></div>
+                                                </div>
+                                                <div className="grid grid-cols-5 gap-2">{[{k:'kcal',l:'kcal'},{k:'protein',l:'P'},{k:'fat',l:'F'},{k:'carbs',l:'C'},{k:'fiber',l:'B'}].map(f => (<div key={f.k}><label className={`text-[9px] font-black text-slate-400 uppercase block mb-1 text-center`}>{f.l}</label><input type="number" step="0.1" className="w-full bg-slate-50 rounded-xl p-3 text-xs font-bold text-center border shadow-inner outline-none" value={quickTrack[f.k]} onChange={e => setQuickTrack({...quickTrack, [f.k]: e.target.value})}/></div>))}</div>
+                                                <button type="submit" disabled={!quickTrack.name || !quickTrack.kcal} className={`w-full font-black py-5 rounded-3xl shadow-xl uppercase tracking-widest transition-all ${(!quickTrack.name || !quickTrack.kcal) ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-blue-600 text-white active:scale-95'}`}>Hinzufügen</button>
+                                            </form>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* MODAL: DB ADD / CAMERA SCAN (Zentriert) */}
+                    {showDbAddModal && (
+                        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-md z-50 flex items-center justify-center p-4">
+                            <div className="bg-white w-full max-w-md h-[620px] rounded-[48px] p-8 shadow-2xl animate-modal overflow-hidden flex flex-col">
+                                <div className="flex justify-between items-center mb-6 flex-shrink-0"><h3 className="text-2xl font-black">Neuer Eintrag</h3><button onClick={resetAddState} className="bg-slate-100 p-2.5 rounded-full"><Icon name="X" size={20}/></button></div>
+                                <div className="flex-1 overflow-y-auto custom-scrollbar">
+                                    <div className="space-y-6 pb-4">
+                                        <div className="flex gap-4">
+                                            <input type="file" ref={cameraInputRef} className="hidden" accept="image/*" capture="environment" onChange={handleCameraScan} />
+                                            <button onClick={() => cameraInputRef.current.click()} disabled={isScanning} className="flex-1 bg-blue-50 text-blue-600 border border-blue-100 p-6 rounded-3xl flex flex-col items-center gap-3 active:scale-95 transition-all">
+                                                {isScanning ? (
+                                                    <Icon name="Loader2" size={32} className="animate-spin"/>
+                                                ) : (
+                                                    <React.Fragment>
+                                                        <Icon name="Camera" size={32}/>
+                                                        <span className="text-[10px] font-black uppercase text-center tracking-widest">Nährwerte scannen ✨</span>
+                                                    </React.Fragment>
+                                                )}
+                                            </button>
+                                        </div>
+                                        <form onSubmit={handleDbAddSubmit} className="space-y-6">
+                                            <div><label className="text-[10px] font-black text-slate-400 uppercase ml-2 mb-2 block">Name</label><input type="text" placeholder="z.B. Skyr" className="w-full bg-slate-50 rounded-2xl p-5 font-bold outline-none border shadow-inner" value={quickTrack.name} onChange={e => setQuickTrack({...quickTrack, name: e.target.value})}/></div>
+                                            <div className="grid grid-cols-5 gap-2">{[{k:'kcal',l:'kcal',c:'orange'},{k:'protein',l:'P',c:'blue'},{k:'fat',l:'F',c:'rose'},{k:'carbs',l:'C',c:'amber'},{k:'fiber',l:'B',c:'emerald'}].map(f => (<div key={f.k}><label className={`text-[9px] font-black text-${f.c}-500 uppercase block mb-1 text-center`}>{f.l}</label><input type="number" step="0.1" className="w-full bg-slate-50 rounded-xl p-3 text-xs font-bold text-center outline-none border shadow-inner" value={quickTrack[f.k]} onChange={e => setQuickTrack({...quickTrack, [f.k]: e.target.value})}/></div>))}</div>
+                                            <button type="submit" disabled={!quickTrack.name || !quickTrack.kcal} className={`w-full font-black py-5 rounded-3xl shadow-xl uppercase tracking-widest transition-all ${(!quickTrack.name || !quickTrack.kcal) ? 'bg-slate-200 text-slate-400' : 'bg-blue-600 text-white'}`}>Speichern</button>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* MODAL: CLEAR DB (WIEDER DA) */}
+                    {showClearDbConfirm && (
+                        <div className="fixed inset-0 bg-slate-900/95 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+                            <div className="bg-white w-full max-w-sm rounded-[48px] p-10 text-center shadow-2xl animate-modal">
+                                <div className="bg-rose-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 text-rose-500">
+                                    <Icon name="AlertTriangle" size={40} />
+                                </div>
+                                <h3 className="text-2xl font-black text-slate-800 mb-2">Datenbank leeren?</h3>
+                                <p className="text-slate-500 text-sm mb-8 leading-relaxed">Möchtest du wirklich alle <b>{foodDatabase.length} Einträge</b> unwiderruflich löschen?</p>
+                                <div className="flex flex-col gap-3">
+                                    <button 
+                                        onClick={clearDatabase} 
+                                        className="w-full bg-rose-500 text-white font-black py-5 rounded-[24px] shadow-xl shadow-rose-100 uppercase tracking-widest"
+                                    >
+                                        Ja, Alles Löschen
+                                    </button>
+                                    <button 
+                                        onClick={() => setShowClearDbConfirm(false)} 
+                                        className="w-full bg-slate-50 text-slate-400 font-black py-5 rounded-[24px] uppercase tracking-widest"
+                                    >
+                                        Abbrechen
                                     </button>
                                 </div>
-                                <form onSubmit={handleDbAddSubmit} className="space-y-6">
-                                    <div><label className="text-[10px] font-black text-slate-400 uppercase ml-2 mb-2 block">Name</label><input type="text" placeholder="z.B. Skyr" className="w-full bg-slate-50 rounded-2xl p-5 font-bold outline-none border shadow-inner" value={quickTrack.name} onChange={e => setQuickTrack({...quickTrack, name: e.target.value})}/></div>
-                                    <div className="grid grid-cols-5 gap-2">{[{k:'kcal',l:'kcal',c:'orange'},{k:'protein',l:'P',c:'blue'},{k:'fat',l:'F',c:'rose'},{k:'carbs',l:'C',c:'amber'},{k:'fiber',l:'B',c:'emerald'}].map(f => (<div key={f.k}><label className={`text-[9px] font-black text-${f.c}-500 uppercase block mb-1 text-center`}>{f.l}</label><input type="number" step="0.1" className="w-full bg-slate-50 rounded-xl p-3 text-xs font-bold text-center outline-none border shadow-inner" value={quickTrack[f.k]} onChange={e => setQuickTrack({...quickTrack, [f.k]: e.target.value})}/></div>))}</div>
-                                    <button type="submit" className="w-full bg-blue-600 text-white font-black py-5 rounded-3xl shadow-xl uppercase tracking-widest">In Datenbank speichern</button>
-                                </form>
                             </div>
                         </div>
                     )}
 
-                    {/* MODAL: DIARY ADD */}
-                    {showAddModal && (
-                        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-md z-50 flex items-end justify-center p-4">
-                            <div className="bg-white w-full max-w-md rounded-[48px] p-8 max-h-[90vh] overflow-y-auto custom-scrollbar animate-slide-up">
-                                <div className="flex justify-between items-center mb-8 sticky top-0 bg-white z-10 pb-2"><div><h3 className="text-2xl font-black">Eintragen</h3><p className="text-[10px] font-black uppercase text-blue-600 tracking-widest">{currentAddCategory}</p></div><button onClick={resetAddState} className="bg-slate-100 p-2.5 rounded-full"><Icon name="X" size={20}/></button></div>
-                                <div className="relative mb-8 flex bg-slate-50 rounded-3xl border px-5 items-center shadow-inner"><Icon name="Search" size={20} className="text-slate-400"/><input type="text" placeholder="In deiner DB suchen..." className="w-full bg-transparent p-5 text-sm font-bold outline-none" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}/>
-                                    {filteredSearch.length > 0 && (<div className="absolute top-full left-0 right-0 mt-3 bg-white rounded-3xl shadow-2xl border max-h-60 overflow-y-auto z-50">{filteredSearch.map(f => (<button key={f.id} onClick={() => { setSelectedFood(f); setSearchQuery(''); }} className="w-full text-left p-5 border-b hover:bg-slate-50 font-black text-sm">{f.name}<p className="text-[10px] text-slate-400 uppercase">100g: {Math.round(f.calories)} kcal</p></button>))}</div>)}
-                                </div>
-                                <div className="h-px bg-slate-100 mb-8 flex items-center justify-center"><span className="bg-white px-2 text-[10px] font-black text-slate-300 uppercase tracking-widest">KI / QUICKTRACK ✨</span></div>
-                                <form onSubmit={handleQuickTrackSubmit} className="space-y-6">
-                                    <div className="relative"><textarea placeholder="Beschreibung für KI-Analyse..." className="w-full bg-slate-50 rounded-3xl p-5 text-sm min-h-[100px] border outline-none shadow-inner" value={aiPrompt} onChange={e => setAiPrompt(e.target.value)}/><button type="button" onClick={handleAiAnalyzeRecipe} className="absolute right-4 bottom-4 bg-white shadow-lg border border-blue-100 px-4 py-2 rounded-2xl text-[11px] font-black flex items-center gap-2 text-blue-600">{isAiLoading ? <Icon name="Loader2" size={14} className="animate-spin"/> : <Icon name="BrainCircuit" size={14}/>} KI ANALYSE ✨</button></div>
-                                    <input type="text" placeholder="Name der Mahlzeit" className="w-full bg-slate-50 rounded-2xl p-4 font-bold border outline-none shadow-inner" value={quickTrack.name} onChange={e => setQuickTrack({...quickTrack, name: e.target.value})}/>
-                                    <div className="grid grid-cols-2 gap-4"><div><label className="text-[10px] font-black uppercase mb-1 block ml-2">Menge (g)</label><input type="number" className="w-full bg-slate-50 rounded-2xl p-4 font-black outline-none border" value={amount} onChange={e => setAmount(e.target.value)}/></div><div><label className="text-[10px] font-black uppercase mb-1 block ml-2">Nährwerte</label><select className="w-full bg-slate-50 rounded-2xl p-4 font-black border" value={calcMode} onChange={e => setCalcMode(e.target.value)}><option value="per100g">pro 100g</option><option value="total">Gesamt</option></select></div></div>
-                                    <div className="grid grid-cols-5 gap-2">{[{k:'kcal',l:'kcal',c:'orange'},{k:'protein',l:'P',c:'blue'},{k:'fat',l:'F',c:'rose'},{k:'carbs',l:'C',c:'amber'},{k:'fiber',l:'B',c:'emerald'}].map(f => (<div key={f.k}><label className={`text-[9px] font-black text-${f.c}-500 uppercase block mb-1 text-center`}>{f.l}</label><input type="number" step="0.1" className="w-full bg-slate-50 rounded-xl p-3 text-xs font-bold text-center outline-none border shadow-inner" value={quickTrack[f.k]} onChange={e => setQuickTrack({...quickTrack, [f.k]: e.target.value})}/></div>))}</div>
-                                    <button type="submit" className="w-full bg-blue-600 text-white font-black py-5 rounded-3xl shadow-xl uppercase tracking-widest">Tracken</button>
-                                </form>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* MODAL: PORTION / EDIT LOG */}
+                    {/* PORTION / EDIT LOG (Zentriert) */}
                     {(selectedFood || editingLog) && (
                         <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-md z-[60] flex items-center justify-center p-4">
-                            <div className="bg-white w-full max-w-sm rounded-[56px] p-10 shadow-2xl animate-in zoom-in-95">
+                            <div className="bg-white w-full max-w-sm rounded-[56px] p-10 shadow-2xl animate-modal">
                                 <h3 className="text-2xl font-black mb-1 leading-tight text-slate-800">{(selectedFood || editingLog).name}</h3>
                                 <p className="text-[10px] font-black uppercase text-blue-600 tracking-widest mb-8">{currentAddCategory}</p>
                                 <div className="bg-slate-50 rounded-[40px] p-8 text-center border shadow-inner"><label className="text-[10px] font-black uppercase block mb-3 text-slate-400">Gramm</label><input type="number" autoFocus className="w-full text-6xl font-black bg-transparent text-blue-600 text-center outline-none border-none focus:ring-0" value={amount} onChange={e => setAmount(Math.max(0, parseInt(e.target.value) || 0))}/></div>
-                                <div className="flex gap-4 mt-8"><button onClick={() => {setSelectedFood(null); setEditingLog(null);}} className="flex-1 bg-slate-100 font-black py-5 rounded-[24px] uppercase text-sm">Abbruch</button><button onClick={handleSaveLogEdit} className="flex-[2] bg-blue-600 text-white font-black py-5 rounded-[24px] shadow-lg uppercase text-sm">Bestätigen</button></div>
+                                <div className="flex gap-4 mt-8"><button onClick={() => {setSelectedFood(null); setEditingLog(null);}} className="flex-1 bg-slate-100 font-black py-5 rounded-[24px] uppercase text-sm">Abbruch</button><button onClick={handleSaveLogEdit} className="flex-[2] bg-blue-600 text-white font-black py-5 rounded-[24px] shadow-lg uppercase text-sm">OK</button></div>
                             </div>
                         </div>
                     )}
 
                     {showSettings && (
                         <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                            <div className="bg-white w-full max-w-sm rounded-[48px] p-8 shadow-2xl animate-in zoom-in-95 max-h-[90vh] overflow-y-auto">
-                                <div className="flex justify-between items-center mb-8"><h3 className="text-2xl font-black uppercase text-slate-800">Ziele</h3><button onClick={() => setShowSettings(false)} className="bg-slate-100 p-2.5 rounded-full"><Icon name="X" size={20}/></button></div>
-                                <div className="flex overflow-x-auto gap-3 pb-6 mb-6 border-b no-scrollbar">{[1,2,3,4,5,6,0].map(d => <button key={d} onClick={() => setSettingsDay(d)} className={`px-5 py-3 rounded-2xl text-xs font-black transition-all ${settingsDay === d ? 'bg-blue-600 text-white' : 'bg-slate-50 text-slate-400'}`}>{['Mo','Di','Mi','Do','Fr','Sa','So'][d-1 === -1 ? 6 : d-1]}</button>)}</div>
-                                <div className="space-y-6">
-                                    <div className="flex justify-between items-center"><span className="text-sm font-black uppercase text-slate-400">Tag-Planung</span><button onClick={() => { const s = {...goals[settingsDay]}; const n = {}; [0,1,2,3,4,5,6].forEach(d => n[d] = {...s}); setGoals(n); showToast("Woche synchronisiert!"); }} className="text-[10px] font-black text-blue-600 uppercase bg-blue-50 px-4 py-2 rounded-xl active:scale-95"><Icon name="Copy" size={12} className="inline mr-1"/> Woche füllen</button></div>
-                                    <div className="bg-blue-50 p-6 rounded-[32px] border border-blue-100 text-4xl font-black text-blue-700">{goals[settingsDay]?.calories || 0} <span className="text-sm font-medium opacity-40 uppercase tracking-widest">kcal</span></div>
-                                    <div className="grid grid-cols-2 gap-4">{[{k:'protein',l:'P'},{k:'carbs',l:'C'},{k:'fat',l:'F'},{k:'fiber',l:'B'}].map(m => (<div key={m.k}><label className="text-[9px] font-black uppercase mb-1 ml-2 text-slate-400">{m.l} (g)</label><input type="number" className="w-full bg-slate-50 rounded-2xl p-4 font-black outline-none border border-slate-100 focus:border-blue-500" value={goals[settingsDay]?.[m.k] || 0} onChange={e => { const v = parseInt(e.target.value)||0; const n = {...goals[settingsDay], [m.k]: v}; if(['protein','carbs','fat'].includes(m.k)) n.calories = Math.round((n.protein*4.1)+(n.carbs*4.1)+(n.fat*9.3)); setGoals({...goals, [settingsDay]: n}); }}/></div>))}</div>
-                                    <button onClick={() => setShowSettings(false)} className="w-full bg-blue-600 text-white font-black py-5 rounded-[24px] mt-6 shadow-xl active:scale-95 transition-all">FERTIG</button>
+                            <div className="bg-white w-full max-w-sm h-[620px] rounded-[48px] p-8 shadow-2xl animate-modal overflow-hidden flex flex-col">
+                                <div className="flex justify-between items-center mb-8 flex-shrink-0"><h3 className="text-2xl font-black uppercase text-slate-800">Optionen</h3><button onClick={() => setShowSettings(false)} className="bg-slate-100 p-2.5 rounded-full"><Icon name="X" size={20}/></button></div>
+                                <div className="flex-1 overflow-y-auto custom-scrollbar">
+                                    <div className="space-y-6 pb-4">
+                                        <div className="bg-blue-50 p-6 rounded-3xl space-y-4">
+                                            <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest text-center">Daten-Backup</p>
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <button onClick={exportData} className="bg-white border border-blue-100 text-blue-600 font-black py-3 rounded-2xl flex flex-col items-center gap-1 shadow-sm"><Icon name="Download" size={20}/><span className="text-[9px]">EXPORT</span></button>
+                                                <button onClick={() => backupFileRef.current.click()} className="bg-white border border-blue-100 text-blue-600 font-black py-3 rounded-2xl flex flex-col items-center gap-1 shadow-sm"><Icon name="Upload" size={20}/><span className="text-[9px]">IMPORT</span></button>
+                                                <input type="file" ref={backupFileRef} className="hidden" accept=".txt" onChange={importData} />
+                                            </div>
+                                        </div>
+                                        <div className="flex overflow-x-auto gap-3 pb-2 no-scrollbar">{[1,2,3,4,5,6,0].map(d => <button key={d} onClick={() => setSettingsDay(d)} className={`px-4 py-2 rounded-xl text-xs font-black transition-all ${settingsDay === d ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-50 text-slate-400'}`}>{['Mo','Di','Mi','Do','Fr','Sa','So'][d-1 === -1 ? 6 : d-1]}</button>)}</div>
+                                        <div className="space-y-6">
+                                            <div className="flex justify-between items-center"><span className="text-xs font-black uppercase text-slate-400 tracking-widest">Tages-Ziele</span><button onClick={() => { const s = {...goals[settingsDay]}; const n = {}; [0,1,2,3,4,5,6].forEach(d => n[d] = {...s}); setGoals(n); showToast("Woche synchronisiert!"); }} className="text-[10px] font-black text-blue-600 uppercase bg-blue-50 px-3 py-1.5 rounded-xl"><Icon name="Copy" size={12} className="inline mr-1"/> Woche füllen</button></div>
+                                            <div className="bg-slate-50 p-6 rounded-[32px] border text-4xl font-black text-slate-700 text-center">{goals[settingsDay]?.calories || 0} <span className="text-sm font-medium opacity-40 uppercase">kcal</span></div>
+                                            <div className="grid grid-cols-2 gap-4">{[{k:'protein',l:'P'},{k:'carbs',l:'C'},{k:'fat',l:'F'},{k:'fiber',l:'B'}].map(m => (<div key={m.k}><label className="text-[9px] font-black uppercase mb-1 ml-2 text-slate-400">{m.l} (g)</label><input type="number" className="w-full bg-slate-50 rounded-2xl p-4 font-black outline-none border border-slate-100" value={goals[settingsDay]?.[m.k] || 0} onChange={e => { const v = parseInt(e.target.value)||0; const n = {...goals[settingsDay], [m.k]: v}; if(['protein','carbs','fat'].includes(m.k)) n.calories = Math.round((n.protein*4.1)+(n.carbs*4.1)+(n.fat*9.3)); setGoals({...goals, [settingsDay]: n}); }}/></div>))}</div>
+                                        </div>
+                                    </div>
                                 </div>
+                                <button onClick={() => setShowSettings(false)} className="w-full bg-blue-600 text-white font-black py-5 rounded-[24px] mt-4 shadow-xl active:scale-95 transition-all uppercase text-sm tracking-widest flex-shrink-0">FERTIG</button>
                             </div>
                         </div>
                     )}
