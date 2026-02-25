@@ -27,9 +27,18 @@
         @keyframes slideUp { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
         @keyframes modalAppear { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
         .animate-modal { animation: modalAppear 0.2s ease-out; }
+
+        .sticky-nav {
+            position: sticky;
+            top: 0;
+            z-index: 40;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid #f1f5f9;
+        }
     </style>
 </head>
-<body class="bg-slate-50">
+<body class="bg-slate-50 text-slate-900">
     <div id="loader">
         <div class="flex flex-col items-center gap-4">
             <div class="spinner"></div>
@@ -46,7 +55,12 @@
     <script type="text/babel">
         const { useState, useEffect, useMemo, useRef } = React;
 
-        // --- Stabile Icon Komponente ---
+        // --- Konstanten ---
+        const apiKey = ""; 
+        const GEMINI_MODEL = "gemini-2.5-flash-preview-09-2025";
+        const MEAL_CATEGORIES = ["Frühstück", "Mittagessen", "Abendessen", "Pre-Workout", "Post Workout", "Snacks"];
+
+        // --- Hilfskomponenten ---
         const Icon = ({ name, size = 24, className = "" }) => {
             const icons = {
                 Plus: <path d="M12 5v14M5 12h14"/>,
@@ -60,64 +74,18 @@
                 ),
                 ChevronLeft: <path d="m15 18-6-6 6-6"/>,
                 ChevronRight: <path d="m9 18 6-6-6-6"/>,
-                Search: (
-                    <React.Fragment>
-                        <circle cx="11" cy="11" r="8"/>
-                        <path d="m21 21-4.3-4.3"/>
-                    </React.Fragment>
-                ),
-                Database: (
-                    <React.Fragment>
-                        <ellipse cx="12" cy="5" rx="9" ry="3"/>
-                        <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
-                        <path d="M3 12c0 1.66 4 3 9 3s9-1.34 9-3"/>
-                    </React.Fragment>
-                ),
+                Search: <React.Fragment><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></React.Fragment>,
                 Upload: <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4m14-7-5-5-5 5m5-5v12"/>,
                 Download: <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4m7-5 5 5 5-5m-5 5V3"/>,
                 X: <path d="M18 6 6 18M6 6l12 12"/>,
-                Sparkles: (
-                    <React.Fragment>
-                        <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/>
-                        <path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/>
-                    </React.Fragment>
-                ),
-                Loader2: (
-                    <React.Fragment>
-                        <path d="M12 2v4"/><path d="M12 18v4"/><path d="M4.93 4.93l2.83 2.83"/><path d="M16.24 16.24l2.83 2.83"/><path d="M2 12h4"/><path d="M18 12h4"/><path d="M4.93 19.07l2.83-2.83"/><path d="M16.24 7.76l2.83-2.83"/>
-                    </React.Fragment>
-                ),
-                BrainCircuit: (
-                    <React.Fragment>
-                        <circle cx="12" cy="12" r="9"/>
-                        <path d="M12 3v3"/><path d="M12 18v3"/><path d="M3 12h3"/><path d="M18 12h3"/>
-                    </React.Fragment>
-                ),
-                Copy: (
-                    <React.Fragment>
-                        <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
-                        <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
-                    </React.Fragment>
-                ),
-                History: (
-                    <React.Fragment>
-                        <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
-                        <path d="M3 3v5h5"/><path d="M12 7v5l4 2"/>
-                    </React.Fragment>
-                ),
+                Loader2: <React.Fragment><path d="M12 2v4"/><path d="M12 18v4"/><path d="M4.93 4.93l2.83 2.83"/><path d="M16.24 16.24l2.83 2.83"/><path d="M2 12h4"/><path d="M18 12h4"/><path d="M4.93 19.07l2.83-2.83"/><path d="M16.24 7.76l2.83-2.83"/></React.Fragment>,
+                BrainCircuit: <React.Fragment><circle cx="12" cy="12" r="9"/><path d="M12 3v3"/><path d="M12 18v3"/><path d="M3 12h3"/><path d="M18 12h3"/></React.Fragment>,
+                Copy: <React.Fragment><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></React.Fragment>,
                 Pencil: <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>,
-                Camera: (
-                    <React.Fragment>
-                        <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/>
-                        <circle cx="12" cy="13" r="3"/>
-                    </React.Fragment>
-                ),
-                AlertTriangle: (
-                    <React.Fragment>
-                        <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
-                        <path d="M12 9v4"/><path d="M12 17h.01"/>
-                    </React.Fragment>
-                )
+                Camera: <React.Fragment><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></React.Fragment>,
+                Scale: <React.Fragment><path d="M16 16s3-2 3-9c0-2-1-3-3-3s-3 1-3 3c0 7 3 9 3 9Z"/><path d="M8 16s-3-2-3-9c0-2 1-3 3-3s3 1 3 3c0 7-3 9-3 9Z"/><line x1="12" x2="12" y1="3" y2="21"/><line x1="7" x2="17" y1="21" y2="21"/></React.Fragment>,
+                Target: <React.Fragment><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></React.Fragment>,
+                History: <React.Fragment><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></React.Fragment>
             };
             return (
                 <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
@@ -133,37 +101,32 @@
             const strokeDashoffset = circumference - (Math.min(percentage, 100) / 100) * circumference;
             const isOver = percentage > 100;
             const colorClass = isOver ? "text-rose-400" : "text-emerald-400";
-
             return (
                 <div className="flex flex-col items-center">
                     <div className="relative flex items-center justify-center">
                         <svg className="w-16 h-16 transform -rotate-90">
                             <circle cx="32" cy="32" r={radius} stroke="rgba(255,255,255,0.15)" strokeWidth="6" fill="transparent" />
-                            <circle cx="32" cy="32" r={radius} stroke="currentColor" strokeWidth="6" fill="transparent" 
-                                strokeDasharray={circumference} strokeDashoffset={strokeDashoffset} strokeLinecap="round" 
-                                className={`transition-all duration-1000 ${colorClass}`} />
+                            <circle cx="32" cy="32" r={radius} stroke="currentColor" strokeWidth="6" fill="transparent" strokeDasharray={circumference} strokeDashoffset={strokeDashoffset} strokeLinecap="round" className={`transition-all duration-1000 ${colorClass}`} />
                         </svg>
                         <span className="absolute text-[11px] font-black text-white">{Math.round(percentage)}%</span>
                     </div>
-                    <p className="text-[9px] font-black text-white/50 uppercase mt-2 tracking-widest">{label}</p>
-                    <p className="text-[10px] font-bold text-white leading-none mt-0.5">{Math.round(value)}g / {target}g</p>
+                    <p className="text-[9px] font-black text-white/50 uppercase mt-2 tracking-widest text-center">{label}</p>
+                    <p className="text-[10px] font-bold text-white leading-none mt-0.5 text-center">{Math.round(value)}g / {target}g</p>
                 </div>
             );
         };
-
-        const apiKey = ""; 
-        const GEMINI_MODEL = "gemini-2.5-flash-preview-09-2025";
-        const MEAL_CATEGORIES = ["Frühstück", "Mittagessen", "Abendessen", "Pre-Workout", "Post Workout", "Snacks"];
 
         const App = () => {
             const getTodayStr = () => new Date().toISOString().split('T')[0];
             const getDayIndex = (dateStr) => new Date(dateStr).getDay();
 
             // --- State ---
-            const [logs, setLogs] = useState(() => JSON.parse(localStorage.getItem('nt_v32_logs')) || []);
-            const [foodDatabase, setFoodDatabase] = useState(() => JSON.parse(localStorage.getItem('nt_v32_db')) || []);
+            const [logs, setLogs] = useState(() => JSON.parse(localStorage.getItem('nt_v46_logs')) || []);
+            const [foodDatabase, setFoodDatabase] = useState(() => JSON.parse(localStorage.getItem('nt_v46_db')) || []);
+            const [weightLogs, setWeightLogs] = useState(() => JSON.parse(localStorage.getItem('nt_v46_weight')) || []);
+            const [weightGoal, setWeightGoal] = useState(() => JSON.parse(localStorage.getItem('nt_v46_weight_goal')) || null);
             const [goals, setGoals] = useState(() => {
-                const s = localStorage.getItem('nt_v32_goals');
+                const s = localStorage.getItem('nt_v46_goals');
                 if (s) return JSON.parse(s);
                 const d = { calories: 2192, protein: 150, carbs: 250, fat: 60, fiber: 30 };
                 const init = {}; [0,1,2,3,4,5,6].forEach(i => init[i] = {...d});
@@ -173,33 +136,39 @@
             const [selectedDate, setSelectedDate] = useState(getTodayStr());
             const [activeTab, setActiveTab] = useState('diary');
             const [currentAddCategory, setCurrentAddCategory] = useState("Frühstück");
-            
             const [showSettings, setShowSettings] = useState(false);
             const [settingsDay, setSettingsDay] = useState(getDayIndex(getTodayStr()));
             const [showAddModal, setShowAddModal] = useState(false);
-            const [modalTab, setModalTab] = useState('quick');
+            const [showWeightAddModal, setShowWeightAddModal] = useState(false);
+            const [showGoalModal, setShowGoalModal] = useState(false);
+            const [modalTab, setModalTab] = useState('db');
             const [showDbAddModal, setShowDbAddModal] = useState(false);
             const [showClearDbConfirm, setShowClearDbConfirm] = useState(false);
             const [itemToDelete, setItemToDelete] = useState(null);
-            
+            const [weightToDelete, setWeightToDelete] = useState(null);
+            const [weightToReplace, setWeightToReplace] = useState(null);
+
             const [notification, setNotification] = useState(null);
             const [isImporting, setIsImporting] = useState(false);
             const [isScanning, setIsScanning] = useState(false);
             const [viewMonth, setViewMonth] = useState(new Date());
-            
             const [searchQuery, setSearchQuery] = useState('');
             const [dbSearchQuery, setDbSearchQuery] = useState(''); 
+            const [weightFilter, setWeightFilter] = useState('month'); 
+            const [customWeightRange, setCustomWeightRange] = useState({ start: '', end: getTodayStr() });
             const [selectedFood, setSelectedFood] = useState(null);
             const [editingLog, setEditingLog] = useState(null);
             const [editingDbItem, setEditingDbItem] = useState(null);
             const [amount, setAmount] = useState(100);
             const [calcMode, setCalcMode] = useState('per100g');
-            
             const [aiPrompt, setAiPrompt] = useState('');
             const [quickTrack, setQuickTrack] = useState({ name: '', protein: '', fat: '', carbs: '', fiber: '', kcal: '' });
+            const [newWeight, setNewWeight] = useState({ date: getTodayStr(), value: '' });
+            const [newGoal, setNewGoal] = useState({ targetValue: '', targetDate: '', startValue: '', startDate: getTodayStr() });
             const [isAiLoading, setIsAiLoading] = useState(false);
 
-            const fileInputRef = useRef(null);
+            // Refs
+            const csvInputRef = useRef(null);
             const cameraInputRef = useRef(null);
             const backupFileRef = useRef(null);
 
@@ -208,9 +177,11 @@
                 if (l) { l.style.opacity = '0'; setTimeout(() => l.remove(), 500); }
             }, []);
 
-            useEffect(() => localStorage.setItem('nt_v32_logs', JSON.stringify(logs)), [logs]);
-            useEffect(() => localStorage.setItem('nt_v32_db', JSON.stringify(foodDatabase)), [foodDatabase]);
-            useEffect(() => localStorage.setItem('nt_v32_goals', JSON.stringify(goals)), [goals]);
+            useEffect(() => localStorage.setItem('nt_v46_logs', JSON.stringify(logs)), [logs]);
+            useEffect(() => localStorage.setItem('nt_v46_db', JSON.stringify(foodDatabase)), [foodDatabase]);
+            useEffect(() => localStorage.setItem('nt_v46_weight', JSON.stringify(weightLogs)), [weightLogs]);
+            useEffect(() => localStorage.setItem('nt_v46_weight_goal', JSON.stringify(weightGoal)), [weightGoal]);
+            useEffect(() => localStorage.setItem('nt_v46_goals', JSON.stringify(goals)), [goals]);
 
             const currentDayGoals = goals[getDayIndex(selectedDate)] || { calories: 2000, protein: 150, carbs: 250, fat: 60, fiber: 30 };
             const dailyLogsTotal = logs.filter(log => log.date === selectedDate);
@@ -230,9 +201,7 @@
             const recentItems = useMemo(() => {
                 const map = new Map();
                 [...logs].reverse().forEach(l => {
-                    if (!map.has(l.name)) {
-                        map.set(l.name, { name: l.name, calories: l.calories, protein: l.protein, fat: l.fat, carbs: l.carbs, fiber: l.fiber });
-                    }
+                    if (!map.has(l.name)) map.set(l.name, { name: l.name, calories: l.calories, protein: l.protein, fat: l.fat, carbs: l.carbs, fiber: l.fiber });
                 });
                 return Array.from(map.values()).slice(0, 15);
             }, [logs]);
@@ -240,10 +209,10 @@
             const showToast = (m) => { setNotification(m); setTimeout(() => setNotification(null), 3000); };
 
             const resetAddState = () => {
-                setShowAddModal(false); setShowDbAddModal(false); setSelectedFood(null); setEditingLog(null); 
-                setSearchQuery(''); setAmount(100); setCalcMode('per100g'); setAiPrompt(''); 
+                setShowAddModal(false); setShowDbAddModal(false); setShowWeightAddModal(false); setShowGoalModal(false);
+                setSelectedFood(null); setEditingLog(null); setSearchQuery(''); setAmount(100); setCalcMode('per100g'); setAiPrompt(''); 
                 setQuickTrack({ name: '', protein: '', fat: '', carbs: '', fiber: '', kcal: '' });
-                setModalTab('quick');
+                setWeightToReplace(null); setModalTab('db');
             };
 
             const addLogEntry = (f, g, cat = currentAddCategory) => {
@@ -251,39 +220,41 @@
                 resetAddState(); showToast("Hinzugefügt!");
             };
 
-            const copyFromYesterday = (cat) => {
+            const handleSaveLogEdit = () => {
+                if (editingLog) {
+                    setLogs(logs.map(l => l.id === editingLog.id ? { ...l, amount } : l));
+                    setEditingLog(null); 
+                    showToast("Aktualisiert!");
+                } else if (selectedFood) {
+                    addLogEntry(selectedFood, amount);
+                }
+                setAmount(100);
+            };
+
+            const handleCopyFromYesterday = (cat) => {
                 const yesterday = new Date(selectedDate);
                 yesterday.setDate(yesterday.getDate() - 1);
                 const yDateStr = yesterday.toISOString().split('T')[0];
                 const items = logs.filter(l => l.date === yDateStr && l.category === cat);
-                if (items.length === 0) { showToast("Vortag leer."); return; }
+                if (items.length === 0) { showToast("Gestern war leer."); return; }
                 const newItems = items.map(i => ({ ...i, id: Date.now() + Math.random(), date: selectedDate }));
                 setLogs([...newItems, ...logs]);
-                showToast("Kopiert!");
+                showToast("Vortag kopiert!");
             };
 
             const handleQuickTrackSubmit = (e) => {
-                e.preventDefault();
+                if (e) e.preventDefault();
                 if (!quickTrack.name || !quickTrack.kcal) return;
                 const g = parseFloat(amount) || 100;
                 const factor = calcMode === 'total' ? (100 / g) : 1;
-                addLogEntry({ name: quickTrack.name, calories: parseFloat(quickTrack.kcal) * factor, protein: parseFloat(quickTrack.protein || 0) * factor, fat: parseFloat(quickTrack.fat || 0) * factor, carbs: parseFloat(quickTrack.carbs || 0) * factor, fiber: parseFloat(quickTrack.fiber || 0) * factor }, g);
-            };
-
-            const handleAiAnalyzeRecipe = async () => {
-                if (!aiPrompt) return showToast("Bitte beschreiben.");
-                setIsAiLoading(true);
-                try {
-                    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`, {
-                        method: 'POST', headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ contents: [{ parts: [{ text: `Analysiere Rezept: "${aiPrompt}". Schätze Nährwerte pro 100g oder gesamt. JSON: { "name": string, "kcal": number, "protein": number, "fat": number, "carbs": number, "fiber": number, "isPer100g": boolean }.` }] }], generationConfig: { responseMimeType: "application/json" } })
-                    });
-                    const data = await res.json();
-                    const p = JSON.parse(data.candidates?.[0]?.content?.parts?.[0]?.text);
-                    setQuickTrack({ name: p.name, kcal: p.kcal.toString(), protein: p.protein.toString(), fat: p.fat.toString(), carbs: p.carbs.toString(), fiber: p.fiber.toString() });
-                    setCalcMode(p.isPer100g ? 'per100g' : 'total');
-                    showToast("Analysiert!");
-                } catch (e) { showToast("Fehler."); } finally { setIsAiLoading(false); }
+                addLogEntry({ 
+                    name: quickTrack.name, 
+                    calories: parseFloat(quickTrack.kcal) * factor, 
+                    protein: parseFloat(quickTrack.protein || 0) * factor, 
+                    fat: parseFloat(quickTrack.fat || 0) * factor, 
+                    carbs: parseFloat(quickTrack.carbs || 0) * factor, 
+                    fiber: parseFloat(quickTrack.fiber || 0) * factor 
+                }, g);
             };
 
             const handleCameraScan = async (e) => {
@@ -296,60 +267,65 @@
                     try {
                         const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`, {
                             method: 'POST', headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                contents: [{ parts: [
-                                    { text: "Analysiere Foto einer Nährwerttabelle. Extrahiere Werte pro 100g. JSON: { 'name': string, 'calories': number, 'protein': number, 'fat': number, 'carbs': number, 'fiber': number }" },
-                                    { inlineData: { mimeType: "image/png", data: base64Data } }
-                                ]}],
-                                generationConfig: { responseMimeType: "application/json" }
-                            })
+                            body: JSON.stringify({ contents: [{ parts: [{ text: "Analysiere Nährwerttabelle. JSON: { 'name': string, 'calories': number, 'protein': number, 'fat': number, 'carbs': number, 'fiber': number }" },{ inlineData: { mimeType: "image/png", data: base64Data } }] }], generationConfig: { responseMimeType: "application/json" } })
                         });
                         const data = await res.json();
                         const p = JSON.parse(data.candidates?.[0]?.content?.parts?.[0]?.text);
-                        setQuickTrack({ name: p.name || 'Gescannter Eintrag', kcal: p.calories.toString(), protein: p.protein.toString(), fat: p.fat.toString(), carbs: p.carbs.toString(), fiber: (p.fiber || 0).toString() });
-                        showToast("Scan OK!");
+                        setQuickTrack({ name: p.name || 'Scan', kcal: (p.calories || p.kcal || 0).toString(), protein: (p.protein || 0).toString(), fat: (p.fat || 0).toString(), carbs: (p.carbs || 0).toString(), fiber: (p.fiber || 0).toString() });
+                        showToast("Scan OK! ✨");
                     } catch (err) { showToast("Scan fehlgeschlagen."); } finally { setIsScanning(false); }
                 };
                 reader.readAsDataURL(file);
             };
 
-            const handleDbAddSubmit = (e) => {
+            const addWeightEntry = (e) => {
                 e.preventDefault();
-                const newItem = { id: `manual-${Date.now()}`, name: quickTrack.name || 'Unbenannt', calories: parseFloat(quickTrack.kcal) || 0, protein: parseFloat(quickTrack.protein) || 0, fat: parseFloat(quickTrack.fat) || 0, carbs: parseFloat(quickTrack.carbs) || 0, fiber: parseFloat(quickTrack.fiber) || 0 };
-                setFoodDatabase([newItem, ...foodDatabase]); resetAddState(); showToast("Gespeichert!");
-            };
-
-            const handleSaveLogEdit = () => {
-                if (editingLog) {
-                    setLogs(logs.map(l => l.id === editingLog.id ? { ...l, amount } : l));
-                    setEditingLog(null); setAmount(100); showToast("Aktualisiert!");
-                } else if (selectedFood) {
-                    addLogEntry(selectedFood, amount);
+                if (!newWeight.value) return;
+                const val = parseFloat(newWeight.value);
+                const existingIndex = weightLogs.findIndex(w => w.date === newWeight.date);
+                if (existingIndex !== -1) {
+                    setWeightToReplace({ index: existingIndex, newValue: val, date: newWeight.date });
+                    return;
                 }
+                const updated = [...weightLogs, { id: Date.now(), date: newWeight.date, value: val }].sort((a, b) => new Date(a.date) - new Date(b.date));
+                setWeightLogs(updated);
+                setNewWeight({ date: getTodayStr(), value: '' });
+                resetAddState();
+                showToast("Gewicht gespeichert!");
             };
 
-            const exportData = () => {
-                const data = JSON.stringify({ logs, foodDatabase, goals });
-                const blob = new Blob([data], { type: 'text/plain' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a'); a.href = url; a.download = `nutritrack_backup_${getTodayStr()}.txt`; a.click();
-                showToast("Backup exportiert!");
+            const confirmWeightReplace = () => {
+                const updated = [...weightLogs];
+                updated[weightToReplace.index] = { ...updated[weightToReplace.index], value: weightToReplace.newValue };
+                setWeightLogs(updated);
+                setWeightToReplace(null);
+                setNewWeight({ date: getTodayStr(), value: '' });
+                resetAddState();
+                showToast("Eintrag ersetzt!");
             };
 
-            const importData = (e) => {
-                const file = e.target.files[0];
-                if (!file) return;
-                const reader = new FileReader();
-                reader.onload = (event) => {
-                    try {
-                        const imported = JSON.parse(event.target.result);
-                        if (imported.logs) setLogs(imported.logs);
-                        if (imported.foodDatabase) setFoodDatabase(imported.foodDatabase);
-                        if (imported.goals) setGoals(imported.goals);
-                        showToast("Backup geladen!");
-                    } catch (err) { showToast("Ladefehler."); }
-                };
-                reader.readAsText(file);
+            const saveWeightGoal = (e) => {
+                e.preventDefault();
+                if (!newGoal.targetValue || !newGoal.targetDate || !newGoal.startValue) return;
+                setWeightGoal({ ...newGoal, startValue: parseFloat(newGoal.startValue), targetValue: parseFloat(newGoal.targetValue) });
+                resetAddState();
+                showToast("Ziel gesetzt! 🎯");
+            };
+
+            const handleAiAnalyzeRecipe = async () => {
+                if (!aiPrompt) return showToast("Bitte beschreiben.");
+                setIsAiLoading(true);
+                try {
+                    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`, {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ contents: [{ parts: [{ text: `Analysiere: "${aiPrompt}". Schätze Macros pro 100g. JSON Format: { "name": string, "kcal": number, "protein": number, "fat": number, "carbs": number, "fiber": number }.` }] }], generationConfig: { responseMimeType: "application/json" } })
+                    });
+                    const data = await res.json();
+                    const p = JSON.parse(data.candidates?.[0]?.content?.parts?.[0]?.text);
+                    setQuickTrack({ name: p.name, kcal: p.kcal.toString(), protein: p.protein.toString(), fat: p.fat.toString(), carbs: p.carbs.toString(), fiber: p.fiber.toString() });
+                    setCalcMode('per100g');
+                    showToast("KI fertig!");
+                } catch (e) { showToast("Fehler."); } finally { setIsAiLoading(false); }
             };
 
             const handleFileUpload = (e) => {
@@ -374,22 +350,88 @@
                 reader.readAsText(file);
             };
 
+            const handleDbAddSubmit = (e) => {
+                e.preventDefault();
+                const newItem = { id: `manual-${Date.now()}`, name: quickTrack.name || 'Unbenannt', calories: parseFloat(quickTrack.kcal) || 0, protein: parseFloat(quickTrack.protein) || 0, fat: parseFloat(quickTrack.fat) || 0, carbs: parseFloat(quickTrack.carbs) || 0, fiber: parseFloat(quickTrack.fiber) || 0 };
+                setFoodDatabase([newItem, ...foodDatabase]); resetAddState(); showToast("DB gespeichert!");
+            };
+
+            const exportData = () => {
+                const data = JSON.stringify({ logs, foodDatabase, goals, weightLogs, weightGoal });
+                const blob = new Blob([data], { type: 'text/plain' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a'); a.href = url; a.download = `nutritrack_backup_${getTodayStr()}.txt`; a.click();
+                showToast("Backup exportiert!");
+            };
+
+            const importData = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    try {
+                        const imported = JSON.parse(event.target.result);
+                        if (imported.logs) setLogs(imported.logs);
+                        if (imported.foodDatabase) setFoodDatabase(imported.foodDatabase);
+                        if (imported.goals) setGoals(imported.goals);
+                        if (imported.weightLogs) setWeightLogs(imported.weightLogs);
+                        if (imported.weightGoal) setWeightGoal(imported.weightGoal);
+                        showToast("Backup geladen!");
+                    } catch (err) { showToast("Ladefehler."); }
+                };
+                reader.readAsText(file);
+            };
+
             const clearDatabase = () => { setFoodDatabase([]); setShowClearDbConfirm(false); showToast("DB geleert."); };
 
-            return (
-                <div className="min-h-screen max-w-md mx-auto relative shadow-2xl bg-white lg:bg-slate-50">
-                    <nav className="sticky top-0 bg-white border-b z-40 p-4 flex justify-between items-center">
-                        <div className="flex items-center gap-2 text-blue-600 font-black text-xl tracking-tighter"><Icon name="Utensils" size={24}/> NutriTrack</div>
-                        <button onClick={() => setShowSettings(true)} className="p-2 text-slate-400 hover:text-blue-600"><Icon name="Settings" size={22}/></button>
-                    </nav>
+            // --- Diagramm Logik ---
+            const chartConfig = useMemo(() => {
+                const today = new Date(); today.setHours(0,0,0,0);
+                let spanDays = 30;
+                if (weightFilter === 'week') spanDays = 7;
+                else if (weightFilter === '100days') spanDays = 100;
+                else if (weightFilter === 'year') spanDays = 365;
+                else if (weightFilter === 'custom' && customWeightRange.start) {
+                    const startD = new Date(customWeightRange.start);
+                    spanDays = Math.ceil(Math.abs(today - startD) / (1000 * 60 * 60 * 24));
+                }
+                const minDate = new Date(today); minDate.setDate(today.getDate() - spanDays);
+                const maxDate = new Date(today); maxDate.setDate(today.getDate() + spanDays);
+                const totalSpanMs = maxDate - minDate;
+                const filteredLogs = weightLogs.filter(l => {
+                    const d = new Date(l.date); return d >= minDate && d <= maxDate;
+                });
+                let minW = 1000, maxW = 0;
+                filteredLogs.forEach(l => { if (l.value < minW) minW = l.value; if (l.value > maxW) maxW = l.value; });
+                if (weightGoal) {
+                    const sD = new Date(weightGoal.startDate); const tD = new Date(weightGoal.targetDate);
+                    if ((sD >= minDate && sD <= maxDate) || (tD >= minDate && tD <= maxDate) || (sD <= minDate && tD >= maxDate)) {
+                        minW = Math.min(minW, weightGoal.startValue, weightGoal.targetValue); maxW = Math.max(maxW, weightGoal.startValue, weightGoal.targetValue);
+                    }
+                }
+                if (minW === 1000) { minW = 60; maxW = 75; }
+                const top = maxW + 5; const bottom = Math.min(minW - 2, top - 15);
+                return { minDate, maxDate, totalSpanMs, bottom, top, rangeW: top - bottom, filteredLogs };
+            }, [weightLogs, weightFilter, customWeightRange, weightGoal]);
 
-                    <div className="flex bg-slate-100 m-4 p-1 rounded-2xl gap-1">
-                        {['diary', 'database', 'calendar'].map(t => (
-                            <button key={t} onClick={() => setActiveTab(t)} className={`flex-1 py-2.5 text-xs font-black uppercase rounded-xl transition-all ${activeTab === t ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}>
-                                {t === 'diary' ? 'Tagebuch' : t === 'database' ? 'DB' : 'Kalender'}
-                            </button>
-                        ))}
-                    </div>
+            return (
+                <div className="min-h-screen max-w-md mx-auto relative shadow-2xl bg-white lg:bg-slate-50 pb-20">
+                    
+                    <header className="sticky-nav">
+                        <nav className="p-4 flex justify-between items-center">
+                            <div className="flex items-center gap-2 text-blue-600 font-black text-xl tracking-tighter"><Icon name="Utensils" size={24}/> NutriTrack</div>
+                            <button onClick={() => setShowSettings(true)} className="p-2 text-slate-400 hover:text-blue-600"><Icon name="Settings" size={22}/></button>
+                        </nav>
+                        <div className="px-4 pb-3">
+                            <div className="flex bg-slate-100 p-1 rounded-2xl gap-1 shadow-inner">
+                                {['diary', 'database', 'calendar', 'weight'].map(t => (
+                                    <button key={t} onClick={() => setActiveTab(t)} className={`flex-1 py-2.5 text-[9px] sm:text-xs font-black uppercase rounded-xl transition-all ${activeTab === t ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}>
+                                        {t === 'diary' ? 'Tagebuch' : t === 'database' ? 'DB' : t === 'calendar' ? 'Kalender' : 'Gewicht'}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </header>
 
                     <main className="p-4 space-y-8">
                         {activeTab === 'diary' && (
@@ -404,7 +446,7 @@
                                     <div className="absolute top-0 left-0 w-full h-1/2 bg-gradient-to-b from-white/10 to-transparent pointer-events-none"></div>
                                     <div className="text-center mb-6 relative z-10">
                                         <p className="text-[10px] font-black uppercase text-blue-200 tracking-[0.2em] mb-1">Verbleibend</p>
-                                        <h2 className="text-5xl font-black tracking-tight">{Math.round(currentDayGoals.calories - totals.calories)} <span className="text-lg text-blue-300 font-medium">kcal</span></h2>
+                                        <h2 className="text-5xl font-black tracking-tight">{Math.round(currentDayGoals.calories - totals.calories)} <span className="text-lg text-blue-300 font-medium ml-1">kcal</span></h2>
                                         <div className="w-full h-4 bg-white/15 rounded-full mt-6 shadow-inner relative overflow-hidden">
                                             <div className={`h-full rounded-full transition-all duration-1000 ${consumedPercentage > 100 ? 'bg-rose-400' : 'bg-emerald-400'}`} style={{ width: `${Math.min(consumedPercentage, 100)}%` }} />
                                         </div>
@@ -420,8 +462,7 @@
                                 <div className="space-y-10 pb-8">
                                     {MEAL_CATEGORIES.map(cat => {
                                         const mealLogs = dailyLogsTotal.filter(l => l.category === cat);
-                                        // Nährwerte für diese Kategorie berechnen
-                                        const mealTotals = mealLogs.reduce((acc, curr) => ({
+                                        const mTotals = mealLogs.reduce((acc, curr) => ({
                                             calories: acc.calories + (curr.calories * (curr.amount / 100)),
                                             protein: acc.protein + (curr.protein * (curr.amount / 100)),
                                             carbs: acc.carbs + (curr.carbs * (curr.amount / 100)),
@@ -433,14 +474,10 @@
                                                 <div className="flex justify-between items-center px-2">
                                                     <div className="flex items-center gap-2">
                                                         <h3 className="font-black text-lg text-slate-800">{cat}</h3>
-                                                        {mealLogs.length > 0 && (
-                                                            <span className="text-[10px] text-slate-400 font-medium lowercase">
-                                                                {Math.round(mealTotals.calories)} kcal • P {Math.round(mealTotals.protein)}g • F {Math.round(mealTotals.fat)}g • C {Math.round(mealTotals.carbs)}g
-                                                            </span>
-                                                        )}
+                                                        {mealLogs.length > 0 && <span className="text-[10px] text-slate-400 font-medium lowercase">{Math.round(mTotals.calories)} kcal • P {Math.round(mTotals.protein)}g</span>}
                                                     </div>
                                                     <div className="flex gap-2">
-                                                        <button onClick={() => copyFromYesterday(cat)} className="p-2 text-slate-300 hover:text-blue-600 transition-colors"><Icon name="Copy" size={22}/></button>
+                                                        <button onClick={() => handleCopyFromYesterday(cat)} className="p-2 text-slate-300 hover:text-blue-600 transition-colors"><Icon name="Copy" size={22}/></button>
                                                         <button onClick={() => { setCurrentAddCategory(cat); setShowAddModal(true); }} className="bg-blue-600 text-white w-10 h-10 rounded-2xl flex items-center justify-center shadow-lg active:scale-95 transition-all"><Icon name="Plus" size={24}/></button>
                                                     </div>
                                                 </div>
@@ -450,16 +487,13 @@
                                                             <div key={item.id} className="bg-white p-5 rounded-3xl shadow-sm border flex justify-between items-center animate-in fade-in">
                                                                 <div className="flex-1">
                                                                     <h4 className="font-black text-slate-800 text-sm">{item.name}</h4>
-                                                                    <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1">
-                                                                        <span className="text-[10px] font-bold text-blue-600">{item.amount}g</span>
-                                                                        <span className="text-[10px] font-bold text-orange-500">{Math.round(item.calories * (item.amount/100))} kcal</span>
-                                                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">P: {Math.round(item.protein * (item.amount/100))}g • F: {Math.round(item.fat * (item.amount/100))}g • C: {Math.round(item.carbs * (item.amount/100))}g</span>
+                                                                    <div className="flex flex-wrap gap-x-3 mt-1 text-[10px] font-bold">
+                                                                        <span className="text-blue-600">{item.amount}g</span>
+                                                                        <span className="text-orange-500">{Math.round(item.calories * (item.amount/100))} kcal</span>
+                                                                        <span className="text-slate-400 uppercase tracking-tighter">P: {Math.round(item.protein * (item.amount/100))}g • F: {Math.round(item.fat * (item.amount/100))}g • C: {Math.round(item.carbs * (item.amount/100))}g</span>
                                                                     </div>
                                                                 </div>
-                                                                <div className="flex gap-1 ml-4">
-                                                                    <button onClick={() => { setCurrentAddCategory(cat); setEditingLog(item); setAmount(item.amount); }} className="p-2 text-slate-200 hover:text-blue-500 transition-colors"><Icon name="Pencil" size={18}/></button>
-                                                                    <button onClick={() => setLogs(logs.filter(l => l.id !== item.id))} className="p-2 text-slate-200 hover:text-rose-500 transition-colors"><Icon name="Trash2" size={18}/></button>
-                                                                </div>
+                                                                <div className="flex gap-1 ml-4 transition-colors"><button onClick={() => { setCurrentAddCategory(cat); setEditingLog(item); setAmount(item.amount); }} className="p-2 text-slate-200 hover:text-blue-500"><Icon name="Pencil" size={18}/></button><button onClick={() => setLogs(logs.filter(l => l.id !== item.id))} className="p-2 text-slate-200 hover:text-rose-500"><Icon name="Trash2" size={18}/></button></div>
                                                             </div>
                                                         ))
                                                     }
@@ -473,44 +507,128 @@
 
                         {activeTab === 'database' && (
                             <div className="space-y-4 pb-4">
-                                <div className="sticky top-[72px] bg-slate-50 py-2 z-30 space-y-3">
-                                    <div className="bg-white rounded-2xl border flex items-center px-4 shadow-sm">
-                                        <Icon name="Search" size={18} className="text-slate-400" />
-                                        <input type="text" placeholder="In deiner DB suchen..." className="w-full bg-transparent p-4 text-sm font-bold outline-none" 
-                                            value={dbSearchQuery} onChange={e => setDbSearchQuery(e.target.value)}/>
-                                    </div>
+                                <div className="space-y-3">
+                                    <div className="bg-white rounded-2xl border flex items-center px-4 shadow-sm"><Icon name="Search" size={18} className="text-slate-400" /><input type="text" placeholder="In deiner DB suchen..." className="w-full bg-transparent p-4 text-sm font-bold outline-none" value={dbSearchQuery} onChange={e => setDbSearchQuery(e.target.value)}/></div>
                                     <div className="flex gap-2">
-                                        <button onClick={() => { setQuickTrack({name:'',protein:'',fat:'',carbs:'',fiber:'',kcal:''}); setShowDbAddModal(true); }} className="flex-[2] bg-blue-600 text-white font-black py-4 rounded-2xl flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all">
-                                            <Icon name="Plus" size={20}/> NEUER EINTRAG
-                                        </button>
-                                        <button onClick={() => fileInputRef.current.click()} className="flex-1 bg-blue-50 text-blue-600 font-black py-4 rounded-2xl flex items-center justify-center gap-2 border border-blue-100 active:scale-95 transition-all">
-                                            <Icon name="Upload" size={16}/> CSV
-                                        </button>
-                                        <input type="file" ref={fileInputRef} className="hidden" accept=".csv" onChange={handleFileUpload} />
+                                        <button onClick={() => { setQuickTrack({name:'',protein:'',fat:'',carbs:'',fiber:'',kcal:''}); setShowDbAddModal(true); }} className="flex-[2] bg-blue-600 text-white font-black py-4 rounded-2xl flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all"><Icon name="Plus" size={20}/> NEUER EINTRAG</button>
+                                        <button onClick={() => csvInputRef.current.click()} className="flex-1 bg-blue-50 text-blue-600 font-black py-4 rounded-2xl flex items-center justify-center gap-2 border border-blue-100 active:scale-95 transition-all"><Icon name="Upload" size={16}/> CSV</button>
+                                        <input type="file" ref={csvInputRef} className="hidden" accept=".csv" onChange={handleFileUpload} />
                                     </div>
                                     {foodDatabase.length > 0 && <button onClick={() => setShowClearDbConfirm(true)} className="w-full bg-white text-rose-500 border border-rose-100 font-black py-2 rounded-xl text-[10px] uppercase tracking-widest active:bg-rose-50 transition-all">Datenbank leeren ({foodDatabase.length})</button>}
                                 </div>
                                 <div className="space-y-3">
                                     {filteredDatabaseView.slice(0, 100).map(item => (
                                         <div key={item.id} className="bg-white p-5 rounded-3xl shadow-sm border flex justify-between items-center group">
-                                            <div className="flex-1">
-                                                <h4 className="font-black text-slate-800 text-sm mb-1">{item.name}</h4>
-                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">100g: <span className="text-orange-500 font-black">{Math.round(item.calories)} kcal</span> • P: {item.protein}g</p>
-                                            </div>
-                                            <div className="flex gap-1 ml-4">
-                                                <button onClick={() => setEditingDbItem({...item})} className="p-2 text-slate-200 hover:text-blue-500"><Icon name="Pencil" size={18}/></button>
-                                                <button onClick={() => setItemToDelete(item)} className="p-2 text-slate-200 hover:text-rose-500"><Icon name="Trash2" size={18}/></button>
-                                            </div>
+                                            <div className="flex-1 font-black text-sm">{item.name}<p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">100g: <span className="text-orange-500 font-black">{Math.round(item.calories)} kcal</span> • P: {item.protein}g</p></div>
+                                            <div className="flex gap-1 ml-4 transition-opacity duration-200"><button onClick={() => setEditingDbItem({...item})} className="p-2 text-slate-200 hover:text-blue-500"><Icon name="Pencil" size={18}/></button><button onClick={() => setItemToDelete(item)} className="p-2 text-slate-200 hover:text-rose-500"><Icon name="Trash2" size={18}/></button></div>
                                         </div>
                                     ))}
                                 </div>
                             </div>
                         )}
 
+                        {activeTab === 'weight' && (
+                            <div className="space-y-6">
+                                <section className="bg-white rounded-[40px] p-6 shadow-sm border border-slate-100 overflow-visible">
+                                    <div className="flex justify-between items-center mb-6 px-1">
+                                        <h3 className="font-black text-lg text-slate-800 tracking-tight">Gewichtsverlauf</h3>
+                                        <div className="flex gap-2">
+                                            <button onClick={() => setShowGoalModal(true)} className="p-2 bg-rose-50 text-rose-600 rounded-xl hover:bg-rose-100 shadow-sm"><Icon name="Target" size={18}/></button>
+                                            <select value={weightFilter} onChange={e => setWeightFilter(e.target.value)} className="bg-slate-50 border-none rounded-xl px-4 py-2 text-[10px] font-black uppercase tracking-widest text-blue-600 outline-none shadow-sm">
+                                                <option value="week">Woche</option><option value="month">Monat</option><option value="100days">100 Tage</option><option value="year">Jahr</option><option value="custom">Custom</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div className="h-64 w-full relative mt-4 flex">
+                                        {chartConfig ? (
+                                            <React.Fragment>
+                                                <div className="relative pr-2 border-r border-slate-100 text-right w-12 h-full flex-shrink-0">
+                                                    {(() => {
+                                                        const { bottom, top, rangeW } = chartConfig;
+                                                        const labels = [];
+                                                        const startL = Math.ceil(top / 5) * 5;
+                                                        const endL = Math.floor(bottom / 5) * 5;
+                                                        for(let i = startL; i >= endL; i -= 5) {
+                                                            const topPercent = ((top - i) / rangeW) * 100;
+                                                            if (topPercent >= 0 && topPercent <= 100) labels.push({ val: i, top: topPercent });
+                                                        }
+                                                        return labels.map(l => (
+                                                            <span key={l.val} className="absolute right-2 text-[8px] font-bold text-slate-400 transform -translate-y-1/2" style={{ top: `${l.top}%` }}>{l.val}</span>
+                                                        ));
+                                                    })()}
+                                                </div>
+                                                <div className="flex-1 relative h-full">
+                                                    <svg className="w-full h-full overflow-visible" preserveAspectRatio="none" viewBox="0 0 100 100">
+                                                        <defs><clipPath id="chartClip"><rect x="0" y="0" width="100" height="100" /></clipPath></defs>
+                                                        {(() => {
+                                                            const { bottom, top, rangeW, filteredLogs, minDate, totalSpanMs } = chartConfig;
+                                                            const startL = Math.ceil(top / 5) * 5;
+                                                            const endL = Math.floor(bottom / 5) * 5;
+                                                            const gridLines = [];
+                                                            for(let i = startL; i >= endL; i -= 5) {
+                                                                const yPos = ((top - i) / rangeW) * 100;
+                                                                if(yPos >= 0 && yPos <= 100) gridLines.push(<line key={i} x1="0" y1={yPos} x2="100" y2={yPos} stroke="#f1f5f9" strokeWidth="0.5" />);
+                                                            }
+                                                            const todayLine = <line x1="50" y1="0" x2="50" y2="100" stroke="#e2e8f0" strokeWidth="1" strokeDasharray="4 4" />;
+                                                            const points = filteredLogs.map((d) => {
+                                                                const x = ((new Date(d.date) - minDate) / totalSpanMs) * 100;
+                                                                const y = ((top - d.value) / rangeW) * 100;
+                                                                return { x, y };
+                                                            }).filter(p => p.x >= 0 && p.x <= 100);
+                                                            const polylineStr = points.map(p => `${p.x},${p.y}`).join(' ');
+                                                            let goalPath = null;
+                                                            if (weightGoal) {
+                                                                const gStartD = new Date(weightGoal.startDate); const gEndD = new Date(weightGoal.targetDate);
+                                                                const x1 = ((gStartD - minDate) / totalSpanMs) * 100; const y1 = ((top - weightGoal.startValue) / rangeW) * 100;
+                                                                const x2 = ((gEndD - minDate) / totalSpanMs) * 100; const y2 = ((top - weightGoal.targetValue) / rangeW) * 100;
+                                                                goalPath = <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="#f43f5e" strokeWidth="1.5" strokeDasharray="4 3" opacity="0.7" clipPath="url(#chartClip)" />;
+                                                            }
+                                                            return (
+                                                                <React.Fragment>
+                                                                    {gridLines}
+                                                                    {todayLine}
+                                                                    {goalPath}
+                                                                    {points.length > 1 && <polyline points={polylineStr} fill="none" stroke="#3b82f6" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />}
+                                                                    {points.map((p, i) => <circle key={i} cx={p.x} cy={p.y} r="2" fill="#1e40af" />)}
+                                                                </React.Fragment>
+                                                            );
+                                                        })()}
+                                                    </svg>
+                                                    <div className="absolute top-[calc(100%+8px)] left-0 right-0 flex justify-between px-1 text-[8px] font-bold text-slate-300">
+                                                        <span>{new Date(chartConfig.minDate).toLocaleDateString('de-DE', {day:'2-digit', month:'2-digit'})}</span>
+                                                        <span className="text-blue-400">Heute</span>
+                                                        <span>{new Date(chartConfig.maxDate).toLocaleDateString('de-DE', {day:'2-digit', month:'2-digit'})}</span>
+                                                    </div>
+                                                </div>
+                                            </React.Fragment>
+                                        ) : <div className="w-full h-full flex flex-col items-center justify-center text-slate-200"><Icon name="Scale" size={48} className="opacity-20" /><p className="text-xs mt-2 font-black uppercase">Keine Daten</p></div>}
+                                    </div>
+                                </section>
+                                <div className="space-y-4 pb-4">
+                                    <div className="flex justify-between items-center px-1">
+                                        <h3 className="font-black text-lg text-slate-800 uppercase tracking-tight">Verlauf</h3>
+                                        <button onClick={() => setShowWeightAddModal(true)} className="bg-blue-600 text-white font-black px-5 py-2.5 rounded-2xl flex items-center gap-2 shadow-lg text-[10px] active:scale-95 transition-all"><Icon name="Plus" size={16}/> LOGGEN</button>
+                                    </div>
+                                    <div className="space-y-3">
+                                        {[...weightLogs].reverse().map((entry) => (
+                                            <div key={entry.id} className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm flex justify-between items-center group animate-in fade-in">
+                                                <div className="flex items-center gap-4">
+                                                    <div className="bg-blue-50 text-blue-600 p-3 rounded-2xl"><Icon name="Scale" size={18}/></div>
+                                                    <div><p className="text-sm font-black text-slate-800">{entry.value} kg</p><p className="text-[10px] text-slate-400 uppercase font-bold tracking-widest">{new Date(entry.date).toLocaleDateString('de-DE', { day: '2-digit', month: 'short', year: 'numeric' })}</p></div>
+                                                </div>
+                                                <button onClick={() => setWeightToDelete(entry)} className="p-2 text-slate-200 hover:text-rose-500 transition-colors"><Icon name="Trash2" size={18}/></button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
                         {activeTab === 'calendar' && (
                             <div className="bg-white rounded-[32px] p-6 shadow-sm border border-slate-100 animate-in fade-in">
-                                <div className="flex justify-between items-center mb-8"><button onClick={() => setViewMonth(new Date(viewMonth.getFullYear(), viewMonth.getMonth()-1))}><Icon name="ChevronLeft" size={24}/></button><h3 className="font-black text-xl">{viewMonth.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' })}</h3><button onClick={() => setViewMonth(new Date(viewMonth.getFullYear(), viewMonth.getMonth()+1))}><Icon name="ChevronRight" size={24}/></button></div>
+                                <div className="flex justify-between items-center mb-8"><button onClick={() => setViewMonth(new Date(viewMonth.getFullYear(), viewMonth.getMonth()-1))} className="p-2 hover:bg-slate-50 rounded-xl"><Icon name="ChevronLeft" size={24}/></button><h3 className="font-black text-xl text-center">{viewMonth.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' })}</h3><button onClick={() => setViewMonth(new Date(viewMonth.getFullYear(), viewMonth.getMonth()+1))} className="p-2 hover:bg-slate-50 rounded-xl"><Icon name="ChevronRight" size={24}/></button></div>
                                 <div className="grid grid-cols-7 gap-2">
+                                    {['Mo','Di','Mi','Do','Fr','Sa','So'].map(d => <div key={d} className="text-[10px] font-black text-slate-300 text-center uppercase py-2">{d}</div>)}
                                     {(() => {
                                         const dArr = []; const fD = new Date(viewMonth.getFullYear(), viewMonth.getMonth(), 1).getDay(); const pad = fD === 0 ? 6 : fD - 1; const dIM = new Date(viewMonth.getFullYear(), viewMonth.getMonth()+1, 0).getDate();
                                         for(let i=0; i<pad; i++) dArr.push(null); for(let d=1; d<=dIM; d++) dArr.push(new Date(viewMonth.getFullYear(), viewMonth.getMonth(), d));
@@ -525,102 +643,74 @@
                         )}
                     </main>
 
-                    {/* LÖSCH-BESTÄTIGUNG EINZELNES ITEM */}
-                    {itemToDelete && (
+                    {/* MODALS */}
+                    {showGoalModal && (
                         <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+                            <div className="bg-white w-full max-w-sm rounded-[48px] p-10 shadow-2xl animate-modal flex flex-col">
+                                <div className="flex justify-between items-center mb-8 flex-shrink-0"><h3 className="text-2xl font-black">Ziel setzen</h3><button onClick={resetAddState} className="bg-slate-100 p-2.5 rounded-full"><Icon name="X" size={20}/></button></div>
+                                <form onSubmit={saveWeightGoal} className="space-y-6">
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div><label className="text-[10px] font-black text-slate-400 uppercase ml-2 mb-2 block tracking-widest">Heute (kg)</label><input type="number" step="0.1" className="w-full bg-slate-50 rounded-2xl p-4 font-bold outline-none border shadow-inner" value={newGoal.startValue} onChange={e => setNewGoal({...newGoal, startValue: e.target.value})} placeholder="75"/></div>
+                                        <div><label className="text-[10px] font-black text-slate-400 uppercase ml-2 mb-2 block tracking-widest">Ziel (kg)</label><input type="number" step="0.1" className="w-full bg-slate-50 rounded-2xl p-4 font-bold outline-none border shadow-inner" value={newGoal.targetValue} onChange={e => setNewGoal({...newGoal, targetValue: e.target.value})} placeholder="70"/></div>
+                                    </div>
+                                    <div><label className="text-[10px] font-black text-slate-400 uppercase ml-2 mb-2 block tracking-widest">Zieldatum</label><input type="date" className="w-full bg-slate-50 rounded-2xl p-5 font-bold outline-none border shadow-inner" value={newGoal.targetDate} onChange={e => setNewGoal({...newGoal, targetDate: e.target.value})}/></div>
+                                    <button type="submit" disabled={!newGoal.targetValue || !newGoal.targetDate} className={`w-full font-black py-5 rounded-3xl shadow-xl uppercase tracking-widest transition-all ${(!newGoal.targetValue || !newGoal.targetDate) ? 'bg-slate-200 text-slate-400' : 'bg-rose-500 text-white active:scale-95'}`}>Ziel Speichern</button>
+                                </form>
+                            </div>
+                        </div>
+                    )}
+
+                    {weightToReplace && (
+                        <div className="fixed inset-0 bg-slate-900/95 backdrop-blur-md z-[120] flex items-center justify-center p-4">
                             <div className="bg-white w-full max-w-sm rounded-[48px] p-10 text-center shadow-2xl animate-modal">
-                                <div className="bg-rose-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 text-rose-500"><Icon name="Trash2" size={40} /></div>
-                                <h3 className="text-xl font-black text-slate-800 mb-2">Eintrag löschen?</h3>
-                                <p className="text-slate-500 text-sm mb-8">Möchtest du <b>{itemToDelete.name}</b> wirklich entfernen?</p>
+                                <div className="bg-blue-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 text-blue-600"><Icon name="Scale" size={40} /></div>
+                                <h3 className="text-xl font-black text-slate-800 mb-2 tracking-tight">Eintrag ersetzen?</h3>
+                                <p className="text-slate-500 text-sm mb-8 leading-relaxed">Für den <b>{new Date(weightToReplace.date).toLocaleDateString()}</b> existiert bereits ein Wert. Möchtest du ihn durch <b>{weightToReplace.newValue} kg</b> ersetzen?</p>
                                 <div className="flex flex-col gap-3">
-                                    <button onClick={() => { setFoodDatabase(foodDatabase.filter(i => i.id !== itemToDelete.id)); setItemToDelete(null); showToast("Gelöscht!"); }} className="w-full bg-rose-500 text-white font-black py-4 rounded-[24px] uppercase text-sm">Löschen</button>
-                                    <button onClick={() => setItemToDelete(null)} className="w-full bg-slate-50 text-slate-400 font-black py-4 rounded-[24px] uppercase text-sm">Abbrechen</button>
+                                    <button onClick={confirmWeightReplace} className="w-full bg-blue-600 text-white font-black py-4 rounded-[24px] uppercase text-sm shadow-xl shadow-blue-100">Ersetzen</button>
+                                    <button onClick={() => setWeightToReplace(null)} className="w-full bg-slate-50 text-slate-400 font-black py-4 rounded-[24px] uppercase text-sm">Abbrechen</button>
                                 </div>
                             </div>
                         </div>
                     )}
 
-                    {/* BEARBEITEN-MODAL DB ITEM */}
-                    {editingDbItem && (
-                        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-md z-[60] flex items-center justify-center p-4">
-                            <div className="bg-white w-full max-w-md h-[620px] rounded-[48px] p-8 shadow-2xl animate-modal overflow-hidden flex flex-col">
-                                <div className="flex justify-between items-center mb-6 flex-shrink-0"><h3 className="text-2xl font-black">DB bearbeiten</h3><button onClick={() => setEditingDbItem(null)} className="bg-slate-100 p-2.5 rounded-full"><Icon name="X" size={20}/></button></div>
-                                <div className="flex-1 overflow-y-auto custom-scrollbar">
-                                    <form onSubmit={(e) => { e.preventDefault(); setFoodDatabase(foodDatabase.map(i => i.id === editingDbItem.id ? editingDbItem : i)); setEditingDbItem(null); showToast("DB aktualisiert!"); }} className="space-y-6 pb-4">
-                                        <div><label className="text-[10px] font-black text-slate-400 uppercase ml-2 mb-2 block tracking-widest">Name</label><input type="text" className="w-full bg-slate-50 rounded-2xl p-4 font-bold border outline-none shadow-inner" value={editingDbItem.name} onChange={e => setEditingDbItem({...editingDbItem, name: e.target.value})}/></div>
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div><label className="text-[10px] font-black uppercase mb-1 block ml-2 text-slate-400">kcal / 100g</label><input type="number" className="w-full bg-slate-50 rounded-2xl p-4 font-black border outline-none" value={editingDbItem.calories} onChange={e => setEditingDbItem({...editingDbItem, calories: parseFloat(e.target.value)||0})}/></div>
-                                            <div><label className="text-[10px] font-black uppercase mb-1 block ml-2 text-slate-400">Protein (g)</label><input type="number" step="0.1" className="w-full bg-slate-50 rounded-2xl p-4 font-black border outline-none" value={editingDbItem.protein} onChange={e => setEditingDbItem({...editingDbItem, protein: parseFloat(e.target.value)||0})}/></div>
-                                        </div>
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div><label className="text-[10px] font-black uppercase mb-1 block ml-2 text-slate-400">Fett (g)</label><input type="number" step="0.1" className="w-full bg-slate-50 rounded-2xl p-4 font-black border outline-none" value={editingDbItem.fat} onChange={e => setEditingDbItem({...editingDbItem, fat: parseFloat(e.target.value)||0})}/></div>
-                                            <div><label className="text-[10px] font-black uppercase mb-1 block ml-2 text-slate-400">Carbs (g)</label><input type="number" step="0.1" className="w-full bg-slate-50 rounded-2xl p-4 font-black border outline-none" value={editingDbItem.carbs} onChange={e => setEditingDbItem({...editingDbItem, carbs: parseFloat(e.target.value)||0})}/></div>
-                                        </div>
-                                        <div><label className="text-[10px] font-black uppercase mb-1 block ml-2 text-slate-400">Ballastst. (g)</label><input type="number" step="0.1" className="w-full bg-slate-50 rounded-2xl p-4 font-black border outline-none" value={editingDbItem.fiber || 0} onChange={e => setEditingDbItem({...editingDbItem, fiber: parseFloat(e.target.value)||0})}/></div>
-                                        <button type="submit" className="w-full bg-blue-600 text-white font-black py-5 rounded-3xl shadow-xl uppercase tracking-widest active:scale-95 transition-all">Speichern</button>
-                                    </form>
-                                </div>
+                    {showWeightAddModal && (
+                        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+                            <div className="bg-white w-full max-w-sm rounded-[48px] p-10 shadow-2xl animate-modal flex flex-col">
+                                <div className="flex justify-between items-center mb-8 flex-shrink-0"><h3 className="text-2xl font-black text-slate-800 tracking-tight">Gewicht loggen</h3><button onClick={resetAddState} className="bg-slate-100 p-2.5 rounded-full"><Icon name="X" size={20}/></button></div>
+                                <form onSubmit={addWeightEntry} className="space-y-6">
+                                    <div><label className="text-[10px] font-black text-slate-400 uppercase ml-2 mb-2 block tracking-widest">Datum</label><input type="date" className="w-full bg-slate-50 rounded-2xl p-5 font-bold outline-none border shadow-inner" value={newWeight.date} onChange={e => setNewWeight({...newWeight, date: e.target.value})}/></div>
+                                    <div><label className="text-[10px] font-black text-slate-400 uppercase ml-2 mb-2 block tracking-widest">Gewicht (kg)</label><input type="number" step="0.1" placeholder="z.B. 75.5" autoFocus className="w-full bg-slate-50 rounded-2xl p-5 text-4xl font-black outline-none border border-blue-100 shadow-inner text-blue-600 text-center" value={newWeight.value} onChange={e => setNewWeight({...newWeight, value: e.target.value})}/></div>
+                                    <button type="submit" disabled={!newWeight.value} className={`w-full font-black py-5 rounded-3xl shadow-xl uppercase tracking-widest bg-blue-600 text-white active:scale-95 transition-all`}>Speichern</button>
+                                </form>
                             </div>
                         </div>
                     )}
 
-                    {/* ADD MODAL MIT TABS */}
+                    {(itemToDelete || weightToDelete) && (
+                        <div className="fixed inset-0 bg-slate-900/95 backdrop-blur-md z-[110] flex items-center justify-center p-4"><div className="bg-white w-full max-w-sm rounded-[48px] p-10 text-center shadow-2xl animate-modal"><div className="bg-rose-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 text-rose-500"><Icon name="Trash2" size={40} /></div><h3 className="text-xl font-black text-slate-800 mb-2 tracking-tight">Eintrag löschen?</h3><p className="text-slate-500 text-sm mb-8 leading-relaxed">Soll dieser Eintrag wirklich entfernt werden?</p><div className="flex flex-col gap-3"><button onClick={() => { if (itemToDelete) setFoodDatabase(foodDatabase.filter(i => i.id !== itemToDelete.id)); if (weightToDelete) setWeightLogs(weightLogs.filter(w => w.id !== weightToDelete.id)); setItemToDelete(null); setWeightToDelete(null); showToast("Gelöscht!"); }} className="w-full bg-rose-500 text-white font-black py-4 rounded-[24px] uppercase text-sm shadow-xl shadow-rose-100">Löschen</button><button onClick={() => { setItemToDelete(null); setWeightToDelete(null); }} className="w-full bg-slate-50 text-slate-400 font-black py-4 rounded-[24px] uppercase text-sm">Abbrechen</button></div></div></div>
+                    )}
+
                     {showAddModal && (
-                        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-md z-50 flex items-center justify-center p-4">
+                        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-md z-[80] flex items-center justify-center p-4">
                             <div className="bg-white w-full max-w-md h-[620px] rounded-[48px] p-8 shadow-2xl animate-modal overflow-hidden flex flex-col">
-                                <div className="flex justify-between items-center mb-6 flex-shrink-0">
-                                    <div><h3 className="text-2xl font-black">Eintragen</h3><p className="text-[10px] font-black uppercase text-blue-600 tracking-widest">{currentAddCategory}</p></div>
-                                    <button onClick={resetAddState} className="bg-slate-100 p-2.5 rounded-full"><Icon name="X" size={20}/></button>
-                                </div>
-                                <div className="flex bg-slate-100 p-1 rounded-2xl mb-6 flex-shrink-0 w-full overflow-hidden">
-                                    {[
-                                        { id: 'quick', label: 'Manuell', icon: 'Plus' },
-                                        { id: 'db', label: 'Aus DB', icon: 'Search' },
-                                        { id: 'ai', label: 'KI', icon: 'BrainCircuit' },
-                                        { id: 'history', label: 'Verlauf', icon: 'History' }
-                                    ].map(tab => (
-                                        <button key={tab.id} onClick={() => setModalTab(tab.id)} className={`flex-1 flex flex-col sm:flex-row items-center justify-center gap-1 py-2 px-1 rounded-xl text-[8px] sm:text-[10px] font-black uppercase transition-all ${modalTab === tab.id ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}>
-                                            <Icon name={tab.icon} size={14}/>
-                                            <span className="truncate">{tab.label}</span>
-                                        </button>
+                                <div className="flex justify-between items-center mb-6 flex-shrink-0"><div><h3 className="text-2xl font-black text-slate-800">Hinzufügen</h3><p className="text-[10px] font-black uppercase text-blue-600 tracking-widest">{currentAddCategory}</p></div><button onClick={resetAddState} className="bg-slate-100 p-2.5 rounded-full"><Icon name="X" size={20}/></button></div>
+                                <div className="flex bg-slate-100 p-1 rounded-2xl mb-6 flex-shrink-0 w-full overflow-hidden shadow-inner">
+                                    {[{ id: 'db', label: 'Aus DB', icon: 'Search' },{ id: 'quick', label: 'Manuell', icon: 'Plus' },{ id: 'ai', label: 'KI', icon: 'BrainCircuit' },{ id: 'history', label: 'Verlauf', icon: 'History' }].map(tab => (
+                                        <button key={tab.id} onClick={() => setModalTab(tab.id)} className={`flex-1 flex flex-col sm:flex-row items-center justify-center gap-1 py-3 px-1 rounded-xl text-[8px] sm:text-[10px] font-black uppercase transition-all ${modalTab === tab.id ? 'bg-white text-blue-600 shadow-sm border-b-2 border-blue-600' : 'text-slate-400 hover:text-slate-600'}`}><Icon name={tab.icon} size={14}/><span className="truncate">{tab.label}</span></button>
                                     ))}
                                 </div>
                                 <div className="flex-1 overflow-y-auto custom-scrollbar">
                                     <div className="space-y-6 pb-4">
-                                        {modalTab === 'db' && (
-                                            <div className="relative">
-                                                <div className="bg-slate-50 rounded-3xl flex items-center px-5 border shadow-inner"><Icon name="Search" size={20} className="text-slate-400"/><input type="text" placeholder="Datenbank durchsuchen..." className="w-full bg-transparent p-5 text-sm font-bold outline-none" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}/></div>
-                                                {filteredSearch.length > 0 && (<div className="mt-3 bg-white rounded-3xl border overflow-hidden">{filteredSearch.map(f => (<button key={f.id} onClick={() => { setQuickTrack({ name: f.name, kcal: f.calories || f.kcal, protein: f.protein, fat: f.fat, carbs: f.carbs, fiber: f.fiber }); setModalTab('quick'); }} className="w-full text-left p-5 border-b last:border-b-0 hover:bg-blue-50 font-black text-sm">{f.name}<p className="text-[10px] text-slate-400 uppercase">100g: {Math.round(f.calories || f.kcal)} kcal</p></button>))}</div>)}
-                                            </div>
-                                        )}
-                                        {modalTab === 'ai' && (
-                                            <div className="relative">
-                                                <label className="text-[10px] font-black text-slate-400 uppercase ml-2 mb-2 block tracking-widest">Inhalt beschreiben</label>
-                                                <textarea placeholder="z.B. 2 Eier, Avocado, 100g Quark..." className="w-full bg-slate-50 rounded-3xl p-5 text-sm min-h-[120px] border outline-none shadow-inner" value={aiPrompt} onChange={e => setAiPrompt(e.target.value)}/>
-                                                <button type="button" onClick={handleAiAnalyzeRecipe} disabled={isAiLoading} className="mt-2 w-full bg-blue-50 text-blue-600 font-black py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-95 transition-all">{isAiLoading ? <Icon name="Loader2" size={18} className="animate-spin"/> : <Icon name="BrainCircuit" size={18}/>} KI ANALYSIEREN</button>
-                                            </div>
-                                        )}
-                                        {modalTab === 'history' && (
-                                            <div className="space-y-2">
-                                                {recentItems.length === 0 ? <p className="p-10 text-center text-slate-300 italic text-sm font-medium">Noch keine Historie.</p> : 
-                                                    recentItems.map((f, i) => (
-                                                        <button key={i} onClick={() => { setQuickTrack({ ...f, kcal: f.calories }); setModalTab('quick'); }} className="w-full text-left p-4 bg-slate-50 border rounded-2xl hover:bg-blue-50 group flex justify-between items-center transition-all">
-                                                            <div><p className="font-bold text-slate-800 text-sm">{f.name}</p><p className="text-[10px] text-slate-400 uppercase">100g: {Math.round(f.calories)} kcal</p></div>
-                                                            <Icon name="ChevronRight" size={16} className="text-slate-200 group-hover:text-blue-400"/>
-                                                        </button>
-                                                    ))
-                                                }
-                                            </div>
-                                        )}
+                                        {modalTab === 'db' && (<div className="relative"><div className="bg-slate-50 rounded-3xl flex items-center px-5 border shadow-inner"><Icon name="Search" size={20} className="text-slate-400"/><input type="text" placeholder="Suchen..." className="w-full bg-transparent p-5 text-sm font-bold outline-none" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}/></div>{filteredSearch.length > 0 && (<div className="mt-3 bg-white rounded-3xl border overflow-hidden shadow-xl">{filteredSearch.map(f => (<button key={f.id} onClick={() => { setQuickTrack({ name: f.name, kcal: f.calories || f.kcal, protein: f.protein, fat: f.fat, carbs: f.carbs, fiber: f.fiber }); setModalTab('quick'); }} className="w-full text-left p-5 border-b last:border-b-0 hover:bg-blue-50 font-black text-sm">{f.name}<p className="text-[10px] text-slate-400 uppercase tracking-tighter">100g: {Math.round(f.calories || f.kcal)} kcal</p></button>))}</div>)}</div>)}
+                                        {modalTab === 'ai' && (<div className="relative"><label className="text-[10px] font-black uppercase ml-2 mb-2 block tracking-widest text-slate-400">Inhalt beschreiben</label><textarea placeholder="z.B. 2 Eier, Avocado, 100g Quark..." className="w-full bg-slate-50 rounded-3xl p-5 text-sm min-h-[120px] border outline-none shadow-inner" value={aiPrompt} onChange={e => setAiPrompt(e.target.value)}/><button type="button" onClick={handleAiAnalyzeRecipe} disabled={isAiLoading} className="mt-2 w-full bg-blue-50 text-blue-600 font-black py-4 rounded-2xl flex items-center justify-center gap-2 active:scale-95 transition-all">{isAiLoading ? <Icon name="Loader2" size={18} className="animate-spin"/> : <Icon name="BrainCircuit" size={18}/>} KI ANALYSIEREN</button></div>)}
+                                        {modalTab === 'history' && (<div className="space-y-2">{recentItems.length === 0 ? <p className="p-10 text-center text-slate-300 italic text-sm font-medium">Noch keine Historie.</p> : recentItems.map((f, i) => (<button key={i} onClick={() => { setQuickTrack({ ...f, kcal: f.calories }); setModalTab('quick'); }} className="w-full text-left p-4 bg-slate-50 border rounded-2xl hover:bg-blue-50 group flex justify-between items-center transition-all"><div><p className="font-bold text-slate-800 text-sm">{f.name}</p><p className="text-[10px] text-slate-400 uppercase tracking-tight">100g: {Math.round(f.calories)} kcal</p></div><Icon name="ChevronRight" size={16} className="text-slate-200 group-hover:text-blue-400"/></button>))}</div>)}
                                         {(modalTab === 'quick' || quickTrack.name) && (
                                             <form onSubmit={handleQuickTrackSubmit} className="space-y-6 animate-in fade-in">
-                                                <div><label className="text-[10px] font-black text-slate-400 uppercase ml-2 mb-2 block tracking-widest">Bezeichnung</label><input type="text" placeholder="Name der Mahlzeit" className="w-full bg-slate-50 rounded-2xl p-4 font-bold border outline-none shadow-inner" value={quickTrack.name} onChange={e => setQuickTrack({...quickTrack, name: e.target.value})}/></div>
-                                                <div className="grid grid-cols-2 gap-4">
-                                                    <div><label className="text-[10px] font-black text-slate-400 uppercase mb-1 block ml-2">Menge (g)</label><input type="number" className="w-full bg-slate-50 rounded-2xl p-4 font-black outline-none border" value={amount} onChange={e => setAmount(e.target.value)}/></div>
-                                                    <div><label className="text-[10px] font-black text-slate-400 uppercase mb-1 block ml-2">Modus</label><select className="w-full bg-slate-50 rounded-2xl p-4 font-black border outline-none" value={calcMode} onChange={e => setCalcMode(e.target.value)}><option value="per100g">pro 100g</option><option value="total">Gesamt</option></select></div>
-                                                </div>
+                                                <div><label className="text-[10px] font-black uppercase ml-2 mb-2 block tracking-widest text-slate-400">Bezeichnung</label><input type="text" placeholder="Name" className="w-full bg-slate-50 rounded-2xl p-4 font-bold border outline-none shadow-inner" value={quickTrack.name} onChange={e => setQuickTrack({...quickTrack, name: e.target.value})}/></div>
+                                                <div className="grid grid-cols-2 gap-4"><div><label className="text-[10px] font-black uppercase mb-1 block ml-2 text-slate-400">Menge (g)</label><input type="number" className="w-full bg-slate-50 rounded-2xl p-4 font-black outline-none border shadow-inner" value={amount} onChange={e => setAmount(e.target.value)}/></div><div><label className="text-[10px] font-black uppercase mb-1 block ml-2 text-slate-400">Modus</label><select className="w-full bg-slate-50 rounded-2xl p-4 font-black border outline-none shadow-inner" value={calcMode} onChange={e => setCalcMode(e.target.value)}><option value="per100g">pro 100g</option><option value="total">Gesamt</option></select></div></div>
                                                 <div className="grid grid-cols-5 gap-2">{[{k:'kcal',l:'kcal'},{k:'protein',l:'P'},{k:'fat',l:'F'},{k:'carbs',l:'C'},{k:'fiber',l:'B'}].map(f => (<div key={f.k}><label className={`text-[9px] font-black text-slate-400 uppercase block mb-1 text-center`}>{f.l}</label><input type="number" step="0.1" className="w-full bg-slate-50 rounded-xl p-3 text-xs font-bold text-center border shadow-inner outline-none" value={quickTrack[f.k]} onChange={e => setQuickTrack({...quickTrack, [f.k]: e.target.value})}/></div>))}</div>
-                                                <button type="submit" disabled={!quickTrack.name || !quickTrack.kcal} className={`w-full font-black py-5 rounded-3xl shadow-xl uppercase tracking-widest transition-all ${(!quickTrack.name || !quickTrack.kcal) ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-blue-600 text-white active:scale-95'}`}>Hinzufügen</button>
+                                                <button type="submit" disabled={!quickTrack.name || !quickTrack.kcal} className={`w-full font-black py-5 rounded-3xl shadow-xl uppercase tracking-widest transition-all ${(!quickTrack.name || !quickTrack.kcal) ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-blue-600 text-white active:scale-95'}`}>Eintragen</button>
                                             </form>
                                         )}
                                     </div>
@@ -629,28 +719,34 @@
                         </div>
                     )}
 
-                    {/* MODAL: DB ADD / CAMERA SCAN (Zentriert) */}
-                    {showDbAddModal && (
-                        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-md z-50 flex items-center justify-center p-4">
+                    {editingDbItem && (
+                        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-md z-[130] flex items-center justify-center p-4">
                             <div className="bg-white w-full max-w-md h-[620px] rounded-[48px] p-8 shadow-2xl animate-modal overflow-hidden flex flex-col">
-                                <div className="flex justify-between items-center mb-6 flex-shrink-0"><h3 className="text-2xl font-black">Neuer Eintrag</h3><button onClick={resetAddState} className="bg-slate-100 p-2.5 rounded-full"><Icon name="X" size={20}/></button></div>
+                                <div className="flex justify-between items-center mb-6 flex-shrink-0"><h3 className="text-2xl font-black text-slate-800 tracking-tight">Bearbeiten</h3><button onClick={() => setEditingDbItem(null)} className="bg-slate-100 p-2.5 rounded-full"><Icon name="X" size={20}/></button></div>
+                                <div className="flex-1 overflow-y-auto custom-scrollbar">
+                                    <form onSubmit={(e) => { e.preventDefault(); setFoodDatabase(foodDatabase.map(i => i.id === editingDbItem.id ? editingDbItem : i)); setEditingDbItem(null); showToast("DB aktualisiert!"); }} className="space-y-6 pb-4">
+                                        <div><label className="text-[10px] font-black text-slate-400 uppercase ml-2 mb-2 block tracking-widest tracking-tighter">Name</label><input type="text" className="w-full bg-slate-50 rounded-2xl p-4 font-bold border outline-none shadow-inner" value={editingDbItem.name} onChange={e => setEditingDbItem({...editingDbItem, name: e.target.value})}/></div>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div><label className="text-[10px] font-black uppercase mb-1 block ml-2 text-slate-400">kcal / 100g</label><input type="number" className="w-full bg-slate-50 rounded-2xl p-4 font-black border outline-none shadow-inner" value={editingDbItem.calories} onChange={e => setEditingDbItem({...editingDbItem, calories: parseFloat(e.target.value)||0})}/></div>
+                                            <div><label className="text-[10px] font-black uppercase mb-1 block ml-2 text-slate-400">Protein (g)</label><input type="number" step="0.1" className="w-full bg-slate-50 rounded-2xl p-4 font-black border outline-none shadow-inner" value={editingDbItem.protein} onChange={e => setEditingDbItem({...editingDbItem, protein: parseFloat(e.target.value)||0})}/></div>
+                                        </div>
+                                        <button type="submit" className="w-full bg-blue-600 text-white font-black py-5 rounded-3xl shadow-xl uppercase tracking-widest active:scale-95 transition-all">Speichern</button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {showDbAddModal && (
+                        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+                            <div className="bg-white w-full max-w-md h-[620px] rounded-[48px] p-8 shadow-2xl animate-modal overflow-hidden flex flex-col">
+                                <div className="flex justify-between items-center mb-6 flex-shrink-0"><h3 className="text-2xl font-black text-slate-800">Neuer Eintrag</h3><button onClick={resetAddState} className="bg-slate-100 p-2.5 rounded-full"><Icon name="X" size={20}/></button></div>
                                 <div className="flex-1 overflow-y-auto custom-scrollbar">
                                     <div className="space-y-6 pb-4">
-                                        <div className="flex gap-4">
-                                            <input type="file" ref={cameraInputRef} className="hidden" accept="image/*" capture="environment" onChange={handleCameraScan} />
-                                            <button onClick={() => cameraInputRef.current.click()} disabled={isScanning} className="flex-1 bg-blue-50 text-blue-600 border border-blue-100 p-6 rounded-3xl flex flex-col items-center gap-3 active:scale-95 transition-all">
-                                                {isScanning ? (
-                                                    <Icon name="Loader2" size={32} className="animate-spin"/>
-                                                ) : (
-                                                    <React.Fragment>
-                                                        <Icon name="Camera" size={32}/>
-                                                        <span className="text-[10px] font-black uppercase text-center tracking-widest">Nährwerte scannen ✨</span>
-                                                    </React.Fragment>
-                                                )}
-                                            </button>
-                                        </div>
+                                        <input type="file" ref={cameraInputRef} className="hidden" accept="image/*" capture="environment" onChange={handleCameraScan} />
+                                        <button onClick={() => cameraInputRef.current.click()} disabled={isScanning} className="w-full bg-blue-50 text-blue-600 border border-blue-100 p-6 rounded-3xl flex flex-col items-center gap-3 active:scale-95 transition-all">{isScanning ? <Icon name="Loader2" size={32} className="animate-spin"/> : <React.Fragment><Icon name="Camera" size={32}/><span className="text-[10px] font-black uppercase text-center tracking-widest">Nährwerte scannen ✨</span></React.Fragment>}</button>
                                         <form onSubmit={handleDbAddSubmit} className="space-y-6">
-                                            <div><label className="text-[10px] font-black text-slate-400 uppercase ml-2 mb-2 block">Name</label><input type="text" placeholder="z.B. Skyr" className="w-full bg-slate-50 rounded-2xl p-5 font-bold outline-none border shadow-inner" value={quickTrack.name} onChange={e => setQuickTrack({...quickTrack, name: e.target.value})}/></div>
+                                            <div><label className="text-[10px] font-black text-slate-400 uppercase ml-2 mb-2 block tracking-widest">Name</label><input type="text" placeholder="Skyr" className="w-full bg-slate-50 rounded-2xl p-5 font-bold outline-none border shadow-inner" value={quickTrack.name} onChange={e => setQuickTrack({...quickTrack, name: e.target.value})}/></div>
                                             <div className="grid grid-cols-5 gap-2">{[{k:'kcal',l:'kcal',c:'orange'},{k:'protein',l:'P',c:'blue'},{k:'fat',l:'F',c:'rose'},{k:'carbs',l:'C',c:'amber'},{k:'fiber',l:'B',c:'emerald'}].map(f => (<div key={f.k}><label className={`text-[9px] font-black text-${f.c}-500 uppercase block mb-1 text-center`}>{f.l}</label><input type="number" step="0.1" className="w-full bg-slate-50 rounded-xl p-3 text-xs font-bold text-center outline-none border shadow-inner" value={quickTrack[f.k]} onChange={e => setQuickTrack({...quickTrack, [f.k]: e.target.value})}/></div>))}</div>
                                             <button type="submit" disabled={!quickTrack.name || !quickTrack.kcal} className={`w-full font-black py-5 rounded-3xl shadow-xl uppercase tracking-widest transition-all ${(!quickTrack.name || !quickTrack.kcal) ? 'bg-slate-200 text-slate-400' : 'bg-blue-600 text-white'}`}>Speichern</button>
                                         </form>
@@ -660,51 +756,20 @@
                         </div>
                     )}
 
-                    {/* MODAL: CLEAR DB CONFIRMATION */}
-                    {showClearDbConfirm && (
-                        <div className="fixed inset-0 bg-slate-900/95 backdrop-blur-md z-[100] flex items-center justify-center p-4">
-                            <div className="bg-white w-full max-w-sm rounded-[48px] p-10 text-center shadow-2xl animate-modal">
-                                <div className="bg-rose-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 text-rose-500"><Icon name="AlertTriangle" size={40} /></div>
-                                <h3 className="text-2xl font-black text-slate-800 mb-2">Datenbank leeren?</h3>
-                                <p className="text-slate-500 text-sm mb-8">Wirklich alle <b>{foodDatabase.length} Einträge</b> löschen?</p>
-                                <div className="flex flex-col gap-3">
-                                    <button onClick={clearDatabase} className="w-full bg-rose-500 text-white font-black py-5 rounded-[24px] shadow-xl uppercase text-sm">Ja, Alles Löschen</button>
-                                    <button onClick={() => setShowClearDbConfirm(false)} className="w-full bg-slate-50 text-slate-400 font-black py-5 rounded-[24px] uppercase text-sm">Abbrechen</button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* PORTION / EDIT LOG */}
-                    {(selectedFood || editingLog) && (
-                        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-md z-[60] flex items-center justify-center p-4">
-                            <div className="bg-white w-full max-w-sm rounded-[56px] p-10 shadow-2xl animate-modal">
-                                <h3 className="text-2xl font-black mb-1 leading-tight text-slate-800">{(selectedFood || editingLog).name}</h3>
-                                <p className="text-[10px] font-black uppercase text-blue-600 tracking-widest mb-8">{currentAddCategory}</p>
-                                <div className="bg-slate-50 rounded-[40px] p-8 text-center border shadow-inner"><label className="text-[10px] font-black uppercase block mb-3 text-slate-400">Gramm</label><input type="number" autoFocus className="w-full text-6xl font-black bg-transparent text-blue-600 text-center outline-none border-none focus:ring-0" value={amount} onChange={e => setAmount(Math.max(0, parseInt(e.target.value) || 0))}/></div>
-                                <div className="flex gap-4 mt-8"><button onClick={() => {setSelectedFood(null); setEditingLog(null);}} className="flex-1 bg-slate-100 font-black py-5 rounded-[24px] uppercase text-sm">Abbruch</button><button onClick={handleSaveLogEdit} className="flex-[2] bg-blue-600 text-white font-black py-5 rounded-[24px] shadow-lg uppercase text-sm">OK</button></div>
-                            </div>
-                        </div>
-                    )}
-
                     {showSettings && (
-                        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
                             <div className="bg-white w-full max-w-sm h-[620px] rounded-[48px] p-8 shadow-2xl animate-modal overflow-hidden flex flex-col">
-                                <div className="flex justify-between items-center mb-8 flex-shrink-0"><h3 className="text-2xl font-black uppercase text-slate-800">Optionen</h3><button onClick={() => setShowSettings(false)} className="bg-slate-100 p-2.5 rounded-full"><Icon name="X" size={20}/></button></div>
+                                <div className="flex justify-between items-center mb-8 flex-shrink-0"><h3 className="text-2xl font-black uppercase text-slate-800 tracking-tighter">Optionen</h3><button onClick={() => setShowSettings(false)} className="bg-slate-100 p-2.5 rounded-full"><Icon name="X" size={20}/></button></div>
                                 <div className="flex-1 overflow-y-auto custom-scrollbar">
                                     <div className="space-y-6 pb-4">
-                                        <div className="bg-blue-50 p-6 rounded-3xl space-y-4">
+                                        <div className="bg-blue-50 p-6 rounded-3xl space-y-4 shadow-inner border border-blue-100">
                                             <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest text-center">Daten-Backup</p>
-                                            <div className="grid grid-cols-2 gap-3">
-                                                <button onClick={exportData} className="bg-white border border-blue-100 text-blue-600 font-black py-3 rounded-2xl flex flex-col items-center gap-1 shadow-sm"><Icon name="Download" size={20}/><span className="text-[9px]">EXPORT</span></button>
-                                                <button onClick={() => backupFileRef.current.click()} className="bg-white border border-blue-100 text-blue-600 font-black py-3 rounded-2xl flex flex-col items-center gap-1 shadow-sm"><Icon name="Upload" size={20}/><span className="text-[9px]">IMPORT</span></button>
-                                                <input type="file" ref={backupFileRef} className="hidden" accept=".txt" onChange={importData} />
-                                            </div>
+                                            <div className="grid grid-cols-2 gap-3"><button onClick={exportData} className="bg-white border border-blue-100 text-blue-600 font-black py-3 rounded-2xl flex flex-col items-center gap-1 active:scale-95 shadow-sm"><Icon name="Download" size={20}/><span className="text-[9px]">EXPORT</span></button><button onClick={() => backupFileRef.current.click()} className="bg-white border border-blue-100 text-blue-600 font-black py-3 rounded-2xl flex flex-col items-center gap-1 active:scale-95 shadow-sm"><Icon name="Upload" size={20}/><span className="text-[9px]">IMPORT</span></button><input type="file" ref={backupFileRef} className="hidden" accept=".txt" onChange={importData} /></div>
                                         </div>
                                         <div className="flex overflow-x-auto gap-3 pb-2 no-scrollbar">{[1,2,3,4,5,6,0].map(d => <button key={d} onClick={() => setSettingsDay(d)} className={`px-4 py-2 rounded-xl text-xs font-black transition-all ${settingsDay === d ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-50 text-slate-400'}`}>{['Mo','Di','Mi','Do','Fr','Sa','So'][d-1 === -1 ? 6 : d-1]}</button>)}</div>
                                         <div className="space-y-6">
-                                            <div className="flex justify-between items-center"><span className="text-xs font-black uppercase text-slate-400 tracking-widest">Tages-Ziele</span><button onClick={() => { const s = {...goals[settingsDay]}; const n = {}; [0,1,2,3,4,5,6].forEach(d => n[d] = {...s}); setGoals(n); showToast("Woche synchronisiert!"); }} className="text-[10px] font-black text-blue-600 uppercase bg-blue-50 px-3 py-1.5 rounded-xl"><Icon name="Copy" size={12} className="inline mr-1"/> Woche füllen</button></div>
-                                            <div className="bg-slate-50 p-6 rounded-[32px] border text-4xl font-black text-slate-700 text-center">{goals[settingsDay]?.calories || 0} <span className="text-sm font-medium opacity-40 uppercase">kcal</span></div>
+                                            <div className="flex justify-between items-center"><span className="text-xs font-black uppercase text-slate-400 tracking-widest">Tages-Ziele</span><button onClick={() => { const s = {...goals[settingsDay]}; const n = {}; [0,1,2,3,4,5,6].forEach(d => n[d] = {...s}); setGoals(n); showToast("Synchronisiert!"); }} className="text-[10px] font-black text-blue-600 uppercase bg-blue-50 px-3 py-1.5 rounded-xl"><Icon name="Copy" size={12} className="inline mr-1"/> Woche füllen</button></div>
+                                            <div className="bg-slate-50 p-6 rounded-[32px] border border-slate-100 text-4xl font-black text-slate-700 text-center shadow-inner">{goals[settingsDay]?.calories || 0} <span className="text-sm font-medium opacity-40 uppercase">kcal</span></div>
                                             <div className="grid grid-cols-2 gap-4">{[{k:'protein',l:'P'},{k:'carbs',l:'C'},{k:'fat',l:'F'},{k:'fiber',l:'B'}].map(m => (<div key={m.k}><label className="text-[9px] font-black uppercase mb-1 ml-2 text-slate-400">{m.l} (g)</label><input type="number" className="w-full bg-slate-50 rounded-2xl p-4 font-black outline-none border border-slate-100" value={goals[settingsDay]?.[m.k] || 0} onChange={e => { const v = parseInt(e.target.value)||0; const n = {...goals[settingsDay], [m.k]: v}; if(['protein','carbs','fat'].includes(m.k)) n.calories = Math.round((n.protein*4.1)+(n.carbs*4.1)+(n.fat*9.3)); setGoals({...goals, [settingsDay]: n}); }}/></div>))}</div>
                                         </div>
                                     </div>
@@ -714,7 +779,19 @@
                         </div>
                     )}
 
-                    {notification && <div className="fixed top-12 left-1/2 -translate-x-1/2 bg-slate-800 text-white px-8 py-4 rounded-[24px] text-sm font-black flex items-center gap-4 z-[100] shadow-2xl animate-in fade-in slide-in-from-top-4"><div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>{notification}</div>}
+                    {/* PORTION / EDIT DIALOG (Tagebuch) */}
+                    {(selectedFood || editingLog) && (
+                        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-md z-[110] flex items-center justify-center p-4">
+                            <div className="bg-white w-full max-w-sm rounded-[56px] p-10 shadow-2xl animate-modal">
+                                <h3 className="text-2xl font-black mb-1 leading-tight text-slate-800">{(selectedFood || editingLog).name}</h3>
+                                <p className="text-[10px] font-black uppercase text-blue-600 tracking-widest mb-8">{currentAddCategory}</p>
+                                <div className="bg-slate-50 rounded-[40px] p-8 text-center border shadow-inner"><label className="text-[10px] font-black uppercase block mb-3 text-slate-400 font-black">Gramm</label><input type="number" autoFocus className="w-full text-6xl font-black bg-transparent text-blue-600 text-center outline-none border-none focus:ring-0" value={amount} onChange={e => setAmount(Math.max(0, parseInt(e.target.value) || 0))}/></div>
+                                <div className="flex gap-4 mt-8"><button onClick={() => {setSelectedFood(null); setEditingLog(null);}} className="flex-1 bg-slate-100 font-black py-5 rounded-[24px] uppercase text-sm">Abbruch</button><button onClick={handleSaveLogEdit} className="flex-[2] bg-blue-600 text-white font-black py-5 rounded-[24px] shadow-lg uppercase text-sm">OK</button></div>
+                            </div>
+                        </div>
+                    )}
+
+                    {notification && <div className="fixed top-24 left-1/2 -translate-x-1/2 bg-slate-800 text-white px-8 py-4 rounded-[24px] text-sm font-black flex items-center gap-4 z-[150] shadow-2xl animate-in fade-in slide-in-from-top-4 text-center"><div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>{notification}</div>}
                 </div>
             );
         };
